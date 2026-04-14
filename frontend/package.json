@@ -12,7 +12,7 @@
   "scripts": {
     "start": "vite",
     "build": "vite build",
-    "serve:prod": "serve -s dist -l 3000"
+    "serve:prod": "serve -s dist -l ${PORT:-3000}"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
