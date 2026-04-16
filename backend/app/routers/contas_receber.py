@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_, extract
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import or_, and_, extract, func
 from typing import List, Optional
 from datetime import date
 import csv, io
@@ -9,12 +9,44 @@ from app.db.database import get_db
 from app.models.models import ContaReceber as Model, Draft, Projeto
 from app.schemas.schemas import ContaReceber, ContaReceberCreate, ContaReceberUpdate, ContaReceberListResponse, ImportCSVResponse
 from app.services.tax_calculator import calcular_impostos
-from app.services.deadline_calculator import calcular_vencimento, calcular_prev_pag
+from app.services.deadline_calculator import calcular_vencimento, calcular_prev_pag, calcular_prev_fat
+from app.models.models import Projeto as ProjetoModel
 
 router = APIRouter()
 
-def aplicar_calculos(data: dict, db: Session) -> dict:
-    """Aplica cálculo de impostos e prazos a um dict de conta."""
+def _calc_vl_bruto(wo, escopo, data_inicio, data_fim, db: Session):
+    """Calcula vl_bruto a partir dos dados do projeto WO."""
+    if not wo or not data_inicio or not data_fim:
+        return None
+    proj = db.query(ProjetoModel).filter(ProjetoModel.wo == wo).first()
+    if not proj:
+        return None
+    try:
+        dias = (data_fim - data_inicio).days + 1
+    except Exception:
+        return None
+    if dias <= 0:
+        return None
+    escopo_up = (escopo or "").upper()
+    if escopo_up == "SERVIÇO":
+        return round(proj.vl_diaria * dias, 2) if proj.vl_diaria else None
+    else:
+        if proj.vl_diaria_locacao is None:
+            return None
+        return round(proj.vl_diaria_locacao * dias + (proj.vl_outros or 0), 2)
+
+def aplicar_calculos(data: dict, db: Session, force: bool = False) -> dict:
+    """Aplica cálculo de vl_bruto, impostos e prazos."""
+    # 1. Calcular vl_bruto se não fornecido
+    if not data.get("vl_bruto"):
+        vb = _calc_vl_bruto(
+            data.get("wo"), data.get("escopo"),
+            data.get("data_inicio"), data.get("data_fim"), db
+        )
+        if vb:
+            data["vl_bruto"] = vb
+
+    # 2. Calcular impostos
     if data.get("vl_bruto"):
         taxes = calcular_impostos(
             vl_bruto=data["vl_bruto"],
@@ -25,65 +57,110 @@ def aplicar_calculos(data: dict, db: Session) -> dict:
             db=db
         )
         data.update(taxes)
-    if data.get("data_doc") and data.get("cliente") and not data.get("vencimento"):
+
+    # 3. Vencimento (só recalcula se não preenchido ou force)
+    if data.get("data_doc") and data.get("cliente") and (not data.get("vencimento") or force):
         venc = calcular_vencimento(data["data_doc"], data["cliente"], db)
-        if venc: data["vencimento"] = venc
-    if data.get("vencimento") and data.get("cliente") and not data.get("prev_pag"):
+        if venc:
+            data["vencimento"] = venc
+
+    # 4. Prev.Pag
+    if data.get("vencimento") and data.get("cliente") and (not data.get("prev_pag") or force):
         prev = calcular_prev_pag(data["vencimento"], data["cliente"], db)
         if prev:
             data["prev_pag"] = prev
             data["mes_prev_pag"] = prev.month
             data["ano"] = prev.year
+
+    # 5. Prev.Fat = data_fim + rec_doc dias úteis
+    if data.get("data_fim") and data.get("cliente") and (not data.get("prev_fat") or force):
+        pf = calcular_prev_fat(data["data_fim"], data["cliente"], db)
+        if pf:
+            data["prev_fat"] = pf
+
     return data
 
 @router.get("/", response_model=ContaReceberListResponse)
 def list_contas(
     db: Session = Depends(get_db),
-    wo: Optional[int] = None,
+    wo: Optional[str] = None,
     cliente: Optional[str] = None,
     plataforma: Optional[str] = None,
     draft_id: Optional[int] = None,
+    draft_codigo: Optional[str] = None,
     doc: Optional[str] = None,
+    num_doc: Optional[str] = None,
     status: Optional[str] = None,
-    focal: Optional[str] = None,
+    escopo: Optional[str] = None,
+    faturado_por: Optional[str] = None,
+    data_doc: Optional[str] = None,
+    data_doc_de: Optional[str] = None,
+    data_doc_ate: Optional[str] = None,
     mes: Optional[int] = None,
     ano: Optional[int] = None,
-    data_inicio: Optional[date] = None,
-    data_fim: Optional[date] = None,
     skip: int = 0,
     limit: int = 500,
 ):
+    from datetime import datetime as dt
+    def _d(v: Optional[str]):
+        if not v: return None
+        for fmt in ["%Y-%m-%d", "%d/%m/%Y"]:
+            try: return dt.strptime(v, fmt).date()
+            except: pass
+        return None
+
     q = db.query(Model).filter(Model.ativo == True)
-    if wo: q = q.filter(Model.wo == wo)
+    if wo: q = q.filter(Model.wo == int(wo))
     if cliente: q = q.filter(Model.cliente.ilike(f"%{cliente}%"))
     if plataforma: q = q.filter(Model.plataforma.ilike(f"%{plataforma}%"))
     if draft_id: q = q.filter(Model.draft_id == draft_id)
+    if draft_codigo:
+        d = db.query(Draft).filter(Draft.codigo == int(draft_codigo)).first()
+        if d: q = q.filter(Model.draft_id == d.id)
+        else: q = q.filter(False)
     if doc: q = q.filter(Model.doc == doc)
+    if num_doc: q = q.filter(Model.num_doc.ilike(f"%{num_doc}%"))
     if status: q = q.filter(Model.status == status)
-    if focal: q = q.filter(Model.focal == focal)
+    if escopo: q = q.filter(Model.escopo == escopo)
+    if faturado_por: q = q.filter(Model.faturado_por == faturado_por)
+    if data_doc: q = q.filter(Model.data_doc == _d(data_doc))
+    if data_doc_de: q = q.filter(Model.data_doc >= _d(data_doc_de))
+    if data_doc_ate: q = q.filter(Model.data_doc <= _d(data_doc_ate))
     if mes: q = q.filter(Model.mes_prev_pag == mes)
     if ano: q = q.filter(Model.ano == ano)
-    if data_inicio: q = q.filter(Model.data_doc >= data_inicio)
-    if data_fim: q = q.filter(Model.data_doc <= data_fim)
 
     total = q.count()
-    items = q.order_by(Model.data_doc.desc()).offset(skip).limit(limit).all()
-    total_bruto = sum(i.vl_bruto or 0 for i in items)
-    total_liquido = sum(i.vl_liquido or 0 for i in items)
-    return ContaReceberListResponse(total=total, total_bruto=round(total_bruto,2), total_liquido=round(total_liquido,2), items=items)
+    total_bruto = q.with_entities(func.sum(Model.vl_bruto)).scalar() or 0
+    total_liquido = q.with_entities(func.sum(Model.vl_liquido)).scalar() or 0
+    items = q.options(joinedload(Model.draft)).order_by(Model.data_doc.desc()).offset(skip).limit(limit).all()
+    return ContaReceberListResponse(total=total, total_bruto=round(float(total_bruto),2), total_liquido=round(float(total_liquido),2), items=items)
+
+@router.post("/recalcular")
+def recalcular_tudo(db: Session = Depends(get_db)):
+    """Recalcula vl_bruto, impostos, vencimento, prev_fat e prev_pag de todos os registros ativos."""
+    items = db.query(Model).filter(Model.ativo == True).all()
+    atualizados = 0
+    for obj in items:
+        d = {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
+        d = aplicar_calculos(d, db, force=True)
+        for k, v in d.items():
+            if hasattr(obj, k):
+                setattr(obj, k, v)
+        atualizados += 1
+    db.commit()
+    return {"atualizados": atualizados}
+
+@router.post("/", response_model=ContaReceber, status_code=201)
+def create_conta(data: ContaReceberCreate, db: Session = Depends(get_db)):
+    d = aplicar_calculos(data.dict(), db)
+    obj = Model(**d)
+    db.add(obj); db.commit(); db.refresh(obj)
+    return obj
 
 @router.get("/{id}", response_model=ContaReceber)
 def get_conta(id: int, db: Session = Depends(get_db)):
     obj = db.query(Model).filter(Model.id == id).first()
     if not obj: raise HTTPException(404)
-    return obj
-
-@router.post("/", response_model=ContaReceber, status_code=201)
-def create_conta(data: ContaReceberCreate, db: Session = Depends(get_db)):
-    d = aplicar_calculos(data.dict(), db)
-    # Buscar draft_id se vier codigo de draft
-    obj = Model(**d)
-    db.add(obj); db.commit(); db.refresh(obj)
     return obj
 
 @router.put("/{id}", response_model=ContaReceber)

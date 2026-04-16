@@ -49,3 +49,17 @@ def calcular_prev_pag(
         else:
             prev = date(vencimento.year, vencimento.month + 1, min(data_limite, 28))
     return next_business_day(prev, db)
+
+def calcular_prev_fat(
+    data_fim: Optional[date],
+    cliente: Optional[str],
+    db: Session
+) -> Optional[date]:
+    """Previsão de faturamento = data_fim + dias de recebimento de docs (rec_doc)."""
+    if not data_fim or not cliente:
+        return None
+    prazo = db.query(ClientePrazo).filter(ClientePrazo.cliente == cliente).first()
+    if not prazo:
+        return None
+    prev = data_fim + timedelta(days=prazo.rec_doc)
+    return next_business_day(prev, db)

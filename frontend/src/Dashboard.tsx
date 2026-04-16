@@ -31,7 +31,7 @@ interface Filters { ano: string; mes: string; cliente: string; plataforma: strin
 type Page = "status" | "faturar" | "doc" | "resposta" | "draft" | "mensal" | "cliente";
 
 /* ========== UTILS ========== */
-const API = (process.env.REACT_APP_API_URL || "http://localhost:8000") + "/api";
+const API = (import.meta.env.VITE_API_URL || "http://localhost:8000") + "/api";
 const fmtK = (v: number) => {
   if (v >= 1e6) return `R$${(v / 1e6).toFixed(1)}Mi`;
   if (v >= 1e3) return `R$${(v / 1e3).toFixed(0)}K`;
@@ -596,8 +596,7 @@ const PAGES: { id: Page; icon: string; label: string }[] = [
   { id: "cliente", icon: "👥", label: "Por Cliente" },
 ];
 
-export default function Dashboard() {
-  const [dark, setDark] = useState(false);
+export default function Dashboard({ dark = false, onToggleDark }: { dark?: boolean; onToggleDark?: () => void }) {
   const T = dark ? DARK : LIGHT;
   const S = mkStyles(T);
   const [page, setPage] = useState<Page>("status");
@@ -660,7 +659,7 @@ export default function Dashboard() {
             <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 16, color: "#10b981" }}>{fmtK(totalBruto)}</div>
           </div>
         </div>
-        <button onClick={() => setDark(d => !d)} style={{ ...S.btn(), padding: "8px 12px", fontSize: 16 }}>{dark ? "☀️" : "🌙"}</button>
+        {onToggleDark && <button onClick={onToggleDark} style={{ ...S.btn(), padding: "8px 12px", fontSize: 16 }}>{dark ? "☀️" : "🌙"}</button>}
       </div>
 
       {/* ── FILTERS ── */}

@@ -118,15 +118,6 @@ class ContaReceber(Base):
     iss_retido = Column(Float, default=0)
     total_retido = Column(Float, default=0)
     vl_liquido = Column(Float, nullable=True)
-    # Impostos a pagar
-    cofins_76 = Column(Float, default=0)
-    csll_288 = Column(Float, default=0)
-    icms_20 = Column(Float, default=0)
-    irpj_48 = Column(Float, default=0)
-    pis_165 = Column(Float, default=0)
-    iss_pagar = Column(Float, default=0)
-    outros = Column(Float, default=0)
-    total_a_pagar = Column(Float, default=0)
     # Prazos / Datas
     data_rec_doc = Column(Date, nullable=True)
     data_inicio = Column(Date, nullable=True)
@@ -140,7 +131,6 @@ class ContaReceber(Base):
     ano = Column(Integer, nullable=True)
     # Status e outros campos
     status = Column(String(80), default="Programado")
-    focal = Column(String(100), nullable=True)
     obs = Column(Text, nullable=True)
     id_ticket_req = Column(String(100), nullable=True)
     # Controle
@@ -150,6 +140,10 @@ class ContaReceber(Base):
     # Relacionamentos
     projeto = relationship("Projeto", back_populates="contas")
     draft = relationship("Draft", back_populates="contas")
+
+    @property
+    def draft_codigo(self):
+        return self.draft.codigo if self.draft else None
 
 class AuditLog(Base):
     __tablename__ = "audit_log"

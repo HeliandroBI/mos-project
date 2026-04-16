@@ -85,7 +85,7 @@ def calc_impostos_retidos(vl_bruto: float, doc_type: str, service_type: str,
     else:
         iss = 0
 
-    total = cofins + csll + inss + irpj + pis + iss
+    total = cofins + csll + irpj + pis + iss
     vl_liquido = vl_bruto - total
 
     return {

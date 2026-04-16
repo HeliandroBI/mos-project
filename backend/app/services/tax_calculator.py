@@ -28,43 +28,65 @@ def get_iss_rate(faturado_por: Optional[str]) -> float:
         return 0.02
     return 0.05  # Rio ou default
 
+def get_aliquota(db: Session, nome: str, tipo_servico: Optional[str] = None,
+                 tipo_documento: Optional[str] = None, ref_date: Optional[date] = None) -> float:
+    """Busca alíquota vigente na tabela Imposto, respeitando data de corte."""
+    if db is None:
+        return 0.0
+    ref = ref_date or date.today()
+    q = db.query(Imposto).filter(
+        Imposto.nome == nome,
+        Imposto.tipo == "retido_fonte",
+        Imposto.ativo == True,
+        Imposto.vigencia_inicio <= ref,
+    ).filter(
+        (Imposto.vigencia_fim == None) | (Imposto.vigencia_fim >= ref)
+    )
+    rows = q.all()
+    # Escolhe o mais específico (tipo_servico + tipo_documento batem melhor)
+    best, best_score = None, -1
+    for r in rows:
+        score = 0
+        if r.tipo_servico and r.tipo_servico == tipo_servico:
+            score += 2
+        elif r.tipo_servico and r.tipo_servico != tipo_servico:
+            continue  # filtro incompatível
+        if r.tipo_documento and r.tipo_documento == tipo_documento:
+            score += 1
+        elif r.tipo_documento and r.tipo_documento != tipo_documento:
+            continue  # filtro incompatível
+        if score > best_score:
+            best, best_score = r, score
+    return best.aliquota if best else 0.0
+
 def calcular_impostos(
     vl_bruto: float,
     doc: Optional[str],
     tipo_servico: Optional[str],
     faturado_por: Optional[str],
     exterior_com_iss: bool = False,
-    db: Session = None
+    db: Session = None,
+    ref_date: Optional[date] = None,
 ):
     """Calcula todos os impostos baseado nas fórmulas do Excel."""
     if not vl_bruto:
         return _zero_taxes()
 
-    doc_nfse = doc and doc.upper() in ("NFSE", "NFSe")
-    doc_danfe = doc and doc.upper() == "DANFE"
+    doc_nfse  = doc and doc.upper() in ("NFSE", "NFSE(EX)")
     is_contrato = tipo_servico and tipo_servico.upper() == "CONTRATO"
-    iss_rate = get_iss_rate(faturado_por)
+    iss_rate  = get_iss_rate(faturado_por)
 
-    # --- RETIDOS NA FONTE ---
-    cofins_3  = vl_bruto * 0.03   if doc_nfse else 0
-    csll_1    = vl_bruto * 0.01   if doc_nfse else 0
-    inss_11   = vl_bruto * 0.11   if (doc_nfse and is_contrato) else 0
-    irpj_15   = vl_bruto * 0.015  if doc_nfse else 0
-    pis_065   = vl_bruto * 0.0065 if doc_nfse else 0
+    # --- RETIDOS NA FONTE (alíquotas do banco) ---
+    cofins_3  = vl_bruto * get_aliquota(db, "COFINS",  tipo_documento="NFSe", ref_date=ref_date) if doc_nfse else 0
+    csll_1    = vl_bruto * get_aliquota(db, "CSLL",    tipo_documento="NFSe", ref_date=ref_date) if doc_nfse else 0
+    irpj_15   = vl_bruto * get_aliquota(db, "IRPJ",    tipo_documento="NFSe", ref_date=ref_date) if doc_nfse else 0
+    pis_065   = vl_bruto * get_aliquota(db, "PIS",     tipo_documento="NFSe", ref_date=ref_date) if doc_nfse else 0
+    inss_11   = vl_bruto * get_aliquota(db, "INSS", tipo_servico="CONTRATO", tipo_documento="NFSe", ref_date=ref_date) \
+                if (doc_nfse and is_contrato) else 0
     iss_local = vl_bruto * iss_rate if (doc_nfse and faturado_por and faturado_por.lower() in ("rio","macaé","macae")) else 0
 
-    total_retido = cofins_3 + csll_1 + inss_11 + irpj_15 + pis_065 + iss_local
+    total_retido = cofins_3 + csll_1 + irpj_15 + pis_065 + iss_local
     vl_liquido   = vl_bruto - total_retido
-
-    # --- A PAGAR ---
-    cofins_76 = max((vl_bruto * 0.076) - cofins_3, 0)
-    csll_288  = max((vl_bruto * 0.0288) - csll_1, 0)
-    icms_20   = vl_bruto * 0.20 if doc_danfe else 0
-    irpj_48   = max((vl_bruto * 0.048) - irpj_15, 0)
-    pis_165   = max((vl_bruto * 0.0165) - pis_065, 0)
-    iss_pagar = max((vl_bruto * iss_rate) - iss_local, 0) if (doc_nfse or exterior_com_iss) else 0
-
-    total_a_pagar = cofins_76 + csll_288 + icms_20 + irpj_48 + pis_165 + iss_pagar
 
     return {
         "cofins_3": round(cofins_3, 2),
@@ -75,17 +97,8 @@ def calcular_impostos(
         "iss_retido": round(iss_local, 2),
         "total_retido": round(total_retido, 2),
         "vl_liquido": round(vl_liquido, 2),
-        "cofins_76": round(cofins_76, 2),
-        "csll_288": round(csll_288, 2),
-        "icms_20": round(icms_20, 2),
-        "irpj_48": round(irpj_48, 2),
-        "pis_165": round(pis_165, 2),
-        "iss_pagar": round(iss_pagar, 2),
-        "outros": 0,
-        "total_a_pagar": round(total_a_pagar, 2),
     }
 
 def _zero_taxes():
     return {k: 0 for k in ["cofins_3","csll_1","inss_11","irpj_15","pis_065",
-        "iss_retido","total_retido","vl_liquido","cofins_76","csll_288",
-        "icms_20","irpj_48","pis_165","iss_pagar","outros","total_a_pagar"]}
+        "iss_retido","total_retido","vl_liquido"]}

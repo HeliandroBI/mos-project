@@ -1,7 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.db.database import SessionLocal, Base, engine
-from app.api.routes import setup, contas, qualtech
+from app.api.routes import setup, qualtech
+from app.routers import impostos, clientes_prazos, projetos, drafts, feriados, contas_receber
 from app.models.models import Imposto, ClientePrazo, Draft, Feriado
 from datetime import date
 
@@ -15,9 +16,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(setup.router, prefix="/setup", tags=["Setup"])
-app.include_router(contas.router, prefix="/api", tags=["Contas a Receber"])
-app.include_router(qualtech.router, prefix="/qualtech", tags=["Qualtech API"])
+app.include_router(setup.router,               prefix="/setup",                  tags=["Setup"])
+app.include_router(qualtech.router,            prefix="/qualtech",               tags=["Qualtech API"])
+app.include_router(impostos.router,            prefix="/api/impostos",           tags=["Impostos"])
+app.include_router(clientes_prazos.router,     prefix="/api/clientes-prazos",    tags=["Clientes e Prazos"])
+app.include_router(projetos.router,            prefix="/api/projetos",           tags=["Projetos (WO)"])
+app.include_router(drafts.router,              prefix="/api/drafts",             tags=["Drafts"])
+app.include_router(feriados.router,            prefix="/api/feriados",           tags=["Feriados"])
+app.include_router(contas_receber.router,      prefix="/api/contas-receber",     tags=["Contas a Receber"])
 
 @app.on_event("startup")
 def startup():

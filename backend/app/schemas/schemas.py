@@ -113,7 +113,6 @@ class ContaReceberBase(BaseModel):
     faturado_por: Optional[str] = None
     vl_bruto: Optional[float] = None
     status: str = "Programado"
-    focal: Optional[str] = None
     obs: Optional[str] = None
     id_ticket_req: Optional[str] = None
     data_rec_doc: Optional[date] = None
@@ -129,6 +128,7 @@ class ContaReceberCreate(ContaReceberBase): pass
 class ContaReceberUpdate(ContaReceberBase): pass
 class ContaReceber(ContaReceberBase):
     id: int
+    draft_codigo: Optional[int] = None
     cofins_3: float = 0
     csll_1: float = 0
     inss_11: float = 0
@@ -137,14 +137,6 @@ class ContaReceber(ContaReceberBase):
     iss_retido: float = 0
     total_retido: float = 0
     vl_liquido: Optional[float] = None
-    cofins_76: float = 0
-    csll_288: float = 0
-    icms_20: float = 0
-    irpj_48: float = 0
-    pis_165: float = 0
-    iss_pagar: float = 0
-    outros: float = 0
-    total_a_pagar: float = 0
     mes_prev_pag: Optional[int] = None
     ano: Optional[int] = None
     criado_em: Optional[datetime] = None

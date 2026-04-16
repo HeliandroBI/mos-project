@@ -10,5 +10,6 @@ start "Frontend - React" cmd /k "cd /d %~dp0frontend && npm start"
 echo.
 echo Servidores iniciados!
 echo   Backend:  http://localhost:8000
-echo   Frontend: http://localhost:3000
+echo   Frontend: http://localhost:5173
 echo.
+pause
