@@ -1,7 +1,18 @@
 import Dashboard from "./Dashboard";
 import { useState, useEffect, useCallback } from "react";
+import { MOCK_CONTAS, MOCK_IMPOSTOS, MOCK_CLIENTES, MOCK_PROJETOS, MOCK_DRAFTS, MOCK_FERIADOS } from "./mockData";
 
+const DEMO = import.meta.env.VITE_DEMO === "true";
 const API = (import.meta.env.VITE_API_URL || "http://localhost:8000") + "/api";
+
+const MOCK_MAP: Record<string, any[]> = {
+  "/contas-receber/": MOCK_CONTAS,
+  "/impostos/": MOCK_IMPOSTOS,
+  "/clientes-prazos/": MOCK_CLIENTES,
+  "/projetos/": MOCK_PROJETOS,
+  "/drafts/": MOCK_DRAFTS,
+  "/feriados/": MOCK_FERIADOS,
+};
 
 type Tab = "contas" | "dashboard" | "impostos" | "clientes" | "projetos" | "drafts" | "feriados";
 
@@ -24,10 +35,16 @@ interface Draft { id?: number; codigo: number; data_draft?: string; descricao?: 
 interface Feriado { id?: number; data: string; nome: string; tipo: string; estado?: string; municipio?: string; pais: string; }
 
 const apiFetch = {
-  get: (url: string) => fetch(`${API}${url}`).then(r => r.json()),
-  post: (url: string, data: any) => fetch(`${API}${url}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
-  put: (url: string, data: any) => fetch(`${API}${url}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
-  del: (url: string) => fetch(`${API}${url}`, { method: "DELETE" }).then(r => r.json()),
+  get: (url: string) => {
+    if (DEMO) {
+      const key = Object.keys(MOCK_MAP).find(k => url.startsWith(k));
+      return Promise.resolve(key ? MOCK_MAP[key] : []);
+    }
+    return fetch(`${API}${url}`).then(r => r.json());
+  },
+  post: (_url: string, _data: any) => DEMO ? Promise.resolve({}) : fetch(`${API}${_url}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(_data) }).then(r => r.json()),
+  put: (_url: string, _data: any) => DEMO ? Promise.resolve({}) : fetch(`${API}${_url}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(_data) }).then(r => r.json()),
+  del: (_url: string) => DEMO ? Promise.resolve({}) : fetch(`${API}${_url}`, { method: "DELETE" }).then(r => r.json()),
 };
 
 const fmt = {
