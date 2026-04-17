@@ -900,6 +900,8 @@ export default function App() {
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [projetos, setProjetos] = useState<Projeto[]>([]);
   const [dark, setDark] = useState(() => localStorage.getItem("mos-dark") === "1");
+  const [dashPage, setDashPage] = useState<string>("status");
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Re-apply theme globals on every dark change
   const T = THEMES[dark ? "dark" : "light"];
@@ -909,6 +911,13 @@ export default function App() {
   S = buildStyles(T);
 
   const toggleDark = () => setDark(d => { const next = !d; localStorage.setItem("mos-dark", next ? "1" : "0"); return next; });
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const close = () => setSettingsOpen(false);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [settingsOpen]);
 
   const reloadDrafts = () => apiFetch.get("/drafts/").then(d => setDrafts(Array.isArray(d) ? d : [])).catch(() => {});
 
@@ -940,11 +949,89 @@ export default function App() {
           {dark ? "☀️" : "🌙"}
         </button>
       </div>
-      <div style={S.nav}>
-        {tabs.map(t => <button key={t.key} style={navBtn(tab === t.key)} onClick={() => setTab(t.key)}>{t.label}</button>)}
+      {/* ── NAV + ⚙️ em flex row — ⚙️ fora do overflow:auto ── */}
+      <div style={{ display: "flex", gap: 6, margin: "8px 16px", alignItems: "center" }}>
+
+        {/* Nav principal (flex:1, overflow auto interno) */}
+        <div style={{ ...S.nav, flex: 1, margin: 0, justifyContent: "flex-start" }}>
+          <button style={navBtn(tab === "contas")} onClick={() => setTab("contas")}>📋 Contas a Receber</button>
+          <button style={navBtn(tab === "dashboard")} onClick={() => setTab("dashboard")}>📊 Dashboard</button>
+
+          {tab === "dashboard" && (
+            <>
+              <div style={{ width: 1, alignSelf: "stretch", background: N.shadowD, margin: "4px 4px" }} />
+              {[
+                { id: "status",   label: "📊 Status" },
+                { id: "faturar",  label: "💰 A Faturar" },
+                { id: "doc",      label: "📄 Documentação" },
+                { id: "resposta", label: "💬 Resp. Cliente" },
+                { id: "draft",    label: "📝 Draft" },
+                { id: "mensal",   label: "📅 Fat. Mensal" },
+                { id: "cliente",  label: "👥 Por Cliente" },
+              ].map(p => (
+                <button key={p.id}
+                  style={{ ...navBtn(dashPage === p.id), fontSize: 11, padding: "6px 10px" }}
+                  onClick={() => setDashPage(p.id)}>{p.label}</button>
+              ))}
+            </>
+          )}
+        </div>
+
+        {/* ⚙️ fora do nav — dropdown abre livremente para baixo/esquerda */}
+        <div style={{ position: "relative", flexShrink: 0 }} onMouseDown={e => e.stopPropagation()}>
+          <button
+            style={{ ...navBtn(["impostos","clientes","projetos","drafts","feriados"].includes(tab)),
+              padding: "8px 14px", background: N.card,
+              boxShadow: `4px 4px 10px ${N.shadowD}, -2px -2px 6px ${N.shadowL}`,
+              borderRadius: 10, display: "flex", alignItems: "center", gap: 6 }}
+            onClick={() => setSettingsOpen(o => !o)}
+          >
+            <span style={{ fontSize: 14 }}>⚙️</span>
+            <span style={{ fontSize: 12, fontWeight: ["impostos","clientes","projetos","drafts","feriados"].includes(tab) ? 700 : 400 }}>
+              Configurações
+            </span>
+            <span style={{ fontSize: 10, opacity: 0.6 }}>{settingsOpen ? "▲" : "▼"}</span>
+          </button>
+
+          {settingsOpen && (
+            <div style={{
+              position: "absolute", right: 0, top: "calc(100% + 6px)",
+              background: N.card, borderRadius: 12,
+              boxShadow: `6px 6px 18px ${N.shadowD}, -3px -3px 10px ${N.shadowL}`,
+              zIndex: 300, overflow: "hidden",
+              /* expande para a esquerda em linha */
+              display: "flex", flexDirection: "row", whiteSpace: "nowrap" as const,
+            }}>
+              {[
+                { key: "impostos" as Tab, icon: "⚙️",  label: "Impostos" },
+                { key: "clientes" as Tab, icon: "👥",  label: "Clientes / Prazos" },
+                { key: "projetos" as Tab, icon: "🏗",  label: "Projetos (WO)" },
+                { key: "drafts"   as Tab, icon: "📝",  label: "Drafts" },
+                { key: "feriados" as Tab, icon: "📅",  label: "Feriados" },
+              ].map((item, i, arr) => (
+                <button key={item.key}
+                  onClick={() => { setTab(item.key); setSettingsOpen(false); }}
+                  style={{
+                    padding: "11px 18px",
+                    background: tab === item.key ? N.accent : "transparent",
+                    color: tab === item.key ? "#fff" : N.text,
+                    border: "none",
+                    borderRight: i < arr.length - 1 ? `1px solid ${N.shadowD}` : "none",
+                    cursor: "pointer", fontSize: 12,
+                    fontWeight: tab === item.key ? 700 : 400,
+                    display: "flex", alignItems: "center", gap: 6,
+                    transition: "background .12s",
+                  }}>
+                  <span>{item.icon}</span><span>{item.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
       </div>
 
-      {tab === "dashboard" && <Dashboard dark={dark} onToggleDark={toggleDark} />}
+      {tab === "dashboard" && <Dashboard dark={dark} onToggleDark={toggleDark} page={dashPage} onPageChange={setDashPage} />}
       {tab === "contas" && <ContasPage drafts={drafts} projetos={projetos} onDraftsChanged={reloadDrafts} />}
 
       {tab === "impostos" && <CRUDPage<Imposto> title="Impostos" icon="🧾" endpoint="impostos"

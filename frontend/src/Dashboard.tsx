@@ -4,6 +4,16 @@ import {
   Cell, PieChart, Pie, Legend, ReferenceLine
 } from "recharts";
 
+/* ── inject drill animation CSS once ── */
+(() => {
+  if (typeof document === "undefined") return;
+  if (document.getElementById("__mos_drill__")) return;
+  const s = document.createElement("style");
+  s.id = "__mos_drill__";
+  s.textContent = "@keyframes drillIn{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:translateX(0)}}";
+  document.head.appendChild(s);
+})();
+
 /* ========== THEME ========== */
 const LIGHT = {
   bg: "#e8edf2", card: "#edf0f5", shadowD: "#c8cdd6", shadowL: "#ffffff",
@@ -27,8 +37,12 @@ interface Conta {
   prev_fat?: string; prev_pag?: string; adicional_dias?: number;
   draft_codigo?: string; obs?: string;
 }
-interface Filters { ano: string; mes: string; cliente: string; plataforma: string; doc: string; }
+interface DashFilters {
+  ano: string; mes: string; cliente: string; plataforma: string;
+  doc: string; status: string; escopo: string; faturado_por: string;
+}
 type Page = "status" | "faturar" | "doc" | "resposta" | "draft" | "mensal" | "cliente";
+type DrillState = { cliente?: string; plataforma?: string };
 
 /* ========== UTILS ========== */
 const API = (import.meta.env.VITE_API_URL || "http://localhost:8000") + "/api";
@@ -108,6 +122,187 @@ function StatCard({ label, value, color, icon, S }: { label: string; value: numb
         {typeof value === "number" ? fmtK(value) : value}
       </div>
       <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{label}</div>
+    </div>
+  );
+}
+
+/* ========== DRILL BREADCRUMB ========== */
+function DrillBreadcrumb({ drill, onDrill, T }: { drill: DrillState; onDrill: (d: DrillState) => void; T: typeof LIGHT }) {
+  if (!drill.cliente) return null;
+  const btn: React.CSSProperties = { background: "none", border: "none", cursor: "pointer", color: T.accent, fontWeight: 700, fontSize: 11, padding: "1px 5px", borderRadius: 4 };
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 3, flexWrap: "wrap" }}>
+      <button style={btn} onClick={() => onDrill({})}>← Todos</button>
+      <span style={{ color: T.muted, fontSize: 12 }}>›</span>
+      {drill.plataforma ? (
+        <>
+          <button style={btn} onClick={() => onDrill({ cliente: drill.cliente })}>{drill.cliente}</button>
+          <span style={{ color: T.muted, fontSize: 12 }}>›</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: T.text }}>{drill.plataforma}</span>
+        </>
+      ) : (
+        <span style={{ fontSize: 11, fontWeight: 700, color: T.text }}>{drill.cliente}</span>
+      )}
+    </div>
+  );
+}
+
+/* ========== DRILL BAR CHART ========== */
+function DrillBarChart({ data, S, T, title = "📊 Por Cliente / Plataforma / WO" }: {
+  data: Conta[]; S: ReturnType<typeof mkStyles>; T: typeof LIGHT; title?: string;
+}) {
+  const [drill, setDrill] = useState<DrillState>({});
+  const drillKey = `${drill.cliente ?? ""}-${drill.plataforma ?? ""}`;
+
+  const { chartData, level } = useMemo(() => {
+    let filtered = data;
+    const level = !drill.cliente ? "cliente" : !drill.plataforma ? "plataforma" : "wo";
+    if (drill.cliente) filtered = filtered.filter(c => c.cliente === drill.cliente);
+    if (drill.plataforma) filtered = filtered.filter(c => c.plataforma === drill.plataforma);
+    const map: Record<string, number> = {};
+    filtered.forEach(c => {
+      const key = level === "cliente" ? (c.cliente ?? "—")
+        : level === "plataforma" ? (c.plataforma ?? "—")
+        : `WO ${c.wo ?? "—"}`;
+      map[key] = (map[key] ?? 0) + (c.vl_bruto ?? 0);
+    });
+    return {
+      chartData: Object.entries(map).map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value).slice(0, 15),
+      level
+    };
+  }, [data, drill]);
+
+  const canDrill = level !== "wo";
+  const barH = Math.max(160, Math.min(chartData.length * 26, 340));
+
+  const handleClick = (entry: { name: string }) => {
+    if (!canDrill) return;
+    if (!drill.cliente) setDrill({ cliente: entry.name });
+    else setDrill({ ...drill, plataforma: entry.name });
+  };
+
+  return (
+    <div style={{ ...S.neo, padding: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 6 }}>
+        <div style={{ ...S.h3, marginBottom: 0 }}>{title}</div>
+        <DrillBreadcrumb drill={drill} onDrill={setDrill} T={T} />
+      </div>
+      <div key={drillKey} style={{ animation: "drillIn 0.22s ease-out" }}>
+        <ResponsiveContainer width="100%" height={barH}>
+          <BarChart data={chartData} layout="vertical" margin={{ left: 130, right: 70 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke={T.shadowD} horizontal={false} />
+            <XAxis type="number" tickFormatter={fmtK} tick={{ fontSize: 9, fill: T.muted }} />
+            <YAxis type="category" dataKey="name" tick={{ fontSize: 9, fill: T.muted }} width={130} />
+            <Tooltip formatter={(v: number) => [fmtBRL(v), "Valor"]} contentStyle={{ background: T.card, border: "none", borderRadius: 8, fontSize: 11 }} />
+            <Bar dataKey="value" radius={[0, 6, 6, 0]} cursor={canDrill ? "pointer" : "default"}
+              onClick={(entry) => handleClick(entry)}>
+              {chartData.map((_, i) => <Cell key={i} fill={`hsl(${210 + i * 9},65%,${58 - i}%)`} />)}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+        {canDrill && chartData.length > 0 && (
+          <div style={{ fontSize: 10, color: T.muted, marginTop: 6, textAlign: "center" }}>
+            💡 Clique em uma barra para detalhar por {level === "cliente" ? "plataforma" : "WO"}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ========== MONTH CALENDAR ========== */
+function MonthCalendar({ year, month, dayMap, maxVal, T }: {
+  year: number; month: number; dayMap: Record<string, number>; maxVal: number; T: typeof LIGHT;
+}) {
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDow = new Date(year, month, 1).getDay();
+  const days: (number | null)[] = [];
+  for (let i = 0; i < firstDow; i++) days.push(null);
+  for (let d = 1; d <= daysInMonth; d++) days.push(d);
+
+  const total = Array.from({ length: daysInMonth }, (_, i) => {
+    const k = `${year}-${String(month + 1).padStart(2, "0")}-${String(i + 1).padStart(2, "0")}`;
+    return dayMap[k] ?? 0;
+  }).reduce((a, b) => a + b, 0);
+
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
+        <div style={{ fontSize: 10, fontWeight: 800, color: T.text }}>{MESES[month]} {year}</div>
+        {total > 0 && <div style={{ fontSize: 9, color: T.accent, fontWeight: 700 }}>{fmtK(total)}</div>}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 2 }}>
+        {["D","S","T","Q","Q","S","S"].map((d, i) => (
+          <div key={i} style={{ fontSize: 7, color: T.muted, textAlign: "center", fontWeight: 700, paddingBottom: 2 }}>{d}</div>
+        ))}
+        {days.map((day, i) => {
+          if (day === null) return <div key={i} />;
+          const k = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+          const val = dayMap[k] ?? 0;
+          const pct = val > 0 ? Math.min(val / maxVal, 1) : 0;
+          const isToday = k === today.toISOString().slice(0, 10);
+          return (
+            <div key={i} title={val > 0 ? `${k}: ${fmtBRL(val)}` : k}
+              style={{
+                borderRadius: 3, cursor: "default", display: "flex", alignItems: "center", justifyContent: "center",
+                aspectRatio: "1",
+                background: pct > 0 ? `rgba(59,130,246,${0.15 + pct * 0.85})` : T.bg,
+                outline: isToday ? `2px solid ${T.accent}` : "none",
+                fontSize: 7, fontWeight: val > 0 ? 700 : 400,
+                color: pct > 0.5 ? "#fff" : pct > 0 ? T.accent : T.muted,
+              }}>
+              {day}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ========== CALENDAR HEATMAP SIDEBAR ========== */
+function CalendarHeatmap({ data, filters, S, T }: {
+  data: Conta[]; filters: DashFilters; S: ReturnType<typeof mkStyles>; T: typeof LIGHT;
+}) {
+  const { dayMap, months, maxVal } = useMemo(() => {
+    const dayMap: Record<string, number> = {};
+    data.forEach(c => {
+      const d = c.data_doc;
+      if (d) dayMap[d.slice(0, 10)] = (dayMap[d.slice(0, 10)] ?? 0) + (c.vl_bruto ?? 0);
+    });
+    const maxVal = Math.max(...Object.values(dayMap), 1);
+
+    let months: { year: number; month: number }[];
+    if (filters.ano && filters.mes) {
+      months = [{ year: parseInt(filters.ano), month: parseInt(filters.mes) - 1 }];
+    } else if (filters.ano) {
+      months = Array.from({ length: 12 }, (_, i) => ({ year: parseInt(filters.ano), month: i }));
+    } else {
+      const now = new Date();
+      months = [-2, -1, 0].map(offset => {
+        const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+        return { year: d.getFullYear(), month: d.getMonth() };
+      });
+    }
+    return { dayMap, months, maxVal };
+  }, [data, filters.ano, filters.mes]);
+
+  return (
+    <div style={{ ...S.neo, padding: "14px 14px 10px", position: "sticky", top: 8 }}>
+      <div style={{ ...S.h3, marginBottom: 12 }}>📆 Calendário</div>
+      <div style={{ maxHeight: "calc(100vh - 160px)", overflowY: "auto", paddingRight: 2 }}>
+        {months.map(({ year, month }) => (
+          <MonthCalendar key={`${year}-${month}`} year={year} month={month} dayMap={dayMap} maxVal={maxVal} T={T} />
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 4, marginTop: 8, alignItems: "center", justifyContent: "center" }}>
+        <span style={{ fontSize: 8, color: T.muted }}>Baixo</span>
+        {[0.15, 0.4, 0.65, 0.9].map(o => (
+          <div key={o} style={{ width: 10, height: 10, borderRadius: 2, background: `rgba(59,130,246,${o})` }} />
+        ))}
+        <span style={{ fontSize: 8, color: T.muted }}>Alto</span>
+      </div>
     </div>
   );
 }
@@ -194,6 +389,7 @@ function PageStatus({ data, S, T }: { data: Conta[]; S: ReturnType<typeof mkStyl
           </tbody>
         </table>
       </div>
+      <DrillBarChart data={data} S={S} T={T} title="👥 Cliente / Plataforma / WO — por Status" />
     </div>
   );
 }
@@ -256,6 +452,7 @@ function PageFaturar({ data, S, T }: { data: Conta[]; S: ReturnType<typeof mkSty
           </tbody>
         </table>
       </div>
+      <DrillBarChart data={data.filter(c => FATURAR_S.includes(c.status ?? ""))} S={S} T={T} title="👥 A Faturar — Cliente / Plataforma / WO" />
     </div>
   );
 }
@@ -302,6 +499,7 @@ function PageDoc({ data, S, T }: { data: Conta[]; S: ReturnType<typeof mkStyles>
           {tm.length > 0 ? <Treemap items={tm} h={280} /> : <div style={{ color: T.muted, fontSize: 12 }}>Sem dados</div>}
         </div>
       </div>
+      <DrillBarChart data={data.filter(c => c.status === "Aguardando Documentação")} S={S} T={T} title="👥 Ag. Documentação — Cliente / Plataforma / WO" />
     </div>
   );
 }
@@ -357,6 +555,7 @@ function PageResposta({ data, S, T }: { data: Conta[]; S: ReturnType<typeof mkSt
           {tm.length > 0 ? <Treemap items={tm} h={280} /> : <div style={{ color: T.muted, fontSize: 12 }}>Sem dados</div>}
         </div>
       </div>
+      <DrillBarChart data={data.filter(c => c.status === "Aguardando Resposta do Cliente")} S={S} T={T} title="👥 Ag. Resposta — Cliente / Plataforma / WO" />
     </div>
   );
 }
@@ -424,6 +623,7 @@ function PageDraft({ data, S, T }: { data: Conta[]; S: ReturnType<typeof mkStyle
           {tm.length > 0 ? <Treemap items={tm} h={300} /> : <div style={{ color: T.muted, fontSize: 12 }}>Sem dados</div>}
         </div>
       </div>
+      <DrillBarChart data={data.filter(c => !!c.data_draft)} S={S} T={T} title="👥 Drafts — Cliente / Plataforma / WO" />
     </div>
   );
 }
@@ -494,71 +694,30 @@ function PageMensal({ data, S, T }: { data: Conta[]; S: ReturnType<typeof mkStyl
           </tbody>
         </table>
       </div>
+      <DrillBarChart data={data} S={S} T={T} title="👥 Mensal — Cliente / Plataforma / WO" />
     </div>
   );
 }
 
 /* ========== PAGE CLIENTE ========== */
 function PageCliente({ data, S, T }: { data: Conta[]; S: ReturnType<typeof mkStyles>; T: typeof LIGHT }) {
-  const { cdata, calD, maxCal } = useMemo(() => {
-    const cmap: Record<string, Record<string,number>> = {};
+  const cdata = useMemo(() => {
     const ctot: Record<string,number> = {};
-    const calMap: Record<string,number> = {};
+    const cmap: Record<string, Record<string,number>> = {};
     data.forEach(c => {
       if (!c.cliente) return;
       const s = c.status ?? "";
       if (!cmap[c.cliente]) cmap[c.cliente] = {};
       cmap[c.cliente][s] = (cmap[c.cliente][s] ?? 0) + (c.vl_bruto ?? 0);
       ctot[c.cliente] = (ctot[c.cliente] ?? 0) + (c.vl_bruto ?? 0);
-      if (c.data_doc) calMap[c.data_doc.slice(0,10)] = (calMap[c.data_doc.slice(0,10)] ?? 0) + (c.vl_bruto ?? 0);
     });
-    const cdata = Object.entries(ctot).map(([cl, total]) => ({ cl, total, statuses: cmap[cl] ?? {} })).sort((a,b) => b.total - a.total);
-    const calD: { date: string; value: number }[] = [];
-    for (let i = 59; i >= 0; i--) {
-      const d = new Date(today); d.setDate(d.getDate() - i);
-      const k = d.toISOString().slice(0,10);
-      calD.push({ date: k, value: calMap[k] ?? 0 });
-    }
-    const maxCal = Math.max(...calD.map(x => x.value), 1);
-    return { cdata, calD, maxCal };
+    return Object.entries(ctot).map(([cl, total]) => ({ cl, total, statuses: cmap[cl] ?? {} })).sort((a,b) => b.total - a.total);
   }, [data]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div style={{ ...S.neo, padding: 16 }}>
-        <div style={S.h3}>👥 Contas a Receber por Cliente</div>
-        <ResponsiveContainer width="100%" height={340}>
-          <BarChart data={cdata.slice(0,20)} layout="vertical" margin={{ left: 110, right: 60 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={T.shadowD} horizontal={false} />
-            <XAxis type="number" tickFormatter={fmtK} tick={{ fontSize: 9, fill: T.muted }} />
-            <YAxis type="category" dataKey="cl" tick={{ fontSize: 9, fill: T.muted }} width={110} />
-            <Tooltip formatter={(v: number) => [fmtBRL(v),"Total"]} contentStyle={{ background: T.card, border: "none", borderRadius: 8, fontSize: 11 }} />
-            <Bar dataKey="total" radius={[0,6,6,0]}>{cdata.slice(0,20).map((_,i) => <Cell key={i} fill={`hsl(${210+i*7},70%,${56-i*1.5}%)`} />)}</Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-      <div style={{ ...S.neo, padding: 16 }}>
-        <div style={S.h3}>📆 Heatmap de Atividade — últimos 60 dias</div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
-          {calD.map((d, i) => {
-            const pct = d.value > 0 ? Math.min(d.value / maxCal, 1) : 0;
-            return (
-              <div key={i} title={`${d.date}: ${d.value > 0 ? fmtBRL(d.value) : "Sem dados"}`}
-                style={{ width: 20, height: 20, borderRadius: 4, cursor: "default", transition: "transform .1s",
-                  background: pct > 0 ? `rgba(59,130,246,${0.15 + pct * .85})` : T.bg,
-                  boxShadow: pct > .5 ? "0 0 6px rgba(59,130,246,.4)" : "none" }}
-                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.transform = "scale(1.3)"; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.transform = "scale(1)"; }}
-              />
-            );
-          })}
-        </div>
-        <div style={{ display: "flex", gap: 8, marginTop: 8, fontSize: 10, color: T.muted, alignItems: "center" }}>
-          <span>Sem atividade</span>
-          {[.15,.4,.65,.9].map(o => <div key={o} style={{ width: 14, height: 14, borderRadius: 3, background: `rgba(59,130,246,${o})` }} />)}
-          <span>Alta atividade</span>
-        </div>
-      </div>
+      {/* Drill-down chart replaces static bar chart */}
+      <DrillBarChart data={data} S={S} T={T} title="👥 Clientes a Receber — Cliente / Plataforma / WO" />
       <div style={{ ...S.neo, padding: 16, overflowX: "auto" }}>
         <div style={S.h3}>📋 Detalhe por Cliente</div>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -586,21 +745,17 @@ function PageCliente({ data, S, T }: { data: Conta[]; S: ReturnType<typeof mkSty
 }
 
 /* ========== MAIN DASHBOARD ========== */
-const PAGES: { id: Page; icon: string; label: string }[] = [
-  { id: "status", icon: "📊", label: "Status" },
-  { id: "faturar", icon: "💰", label: "A Faturar" },
-  { id: "doc", icon: "📄", label: "Documentação" },
-  { id: "resposta", icon: "💬", label: "Resp. Cliente" },
-  { id: "draft", icon: "📝", label: "Draft" },
-  { id: "mensal", icon: "📅", label: "Fat. Mensal" },
-  { id: "cliente", icon: "👥", label: "Por Cliente" },
-];
 
-export default function Dashboard({ dark = false, onToggleDark }: { dark?: boolean; onToggleDark?: () => void }) {
+export default function Dashboard({ dark = false, onToggleDark, page = "status", onPageChange }: {
+  dark?: boolean; onToggleDark?: () => void;
+  page?: string; onPageChange?: (p: string) => void;
+}) {
   const T = dark ? DARK : LIGHT;
   const S = mkStyles(T);
-  const [page, setPage] = useState<Page>("status");
-  const [filters, setFilters] = useState<Filters>({ ano: "Todos", mes: "Todos", cliente: "Todos", plataforma: "Todos", doc: "Todos" });
+  const [filters, setFilters] = useState<DashFilters>({
+    ano: "", mes: "", cliente: "", plataforma: "",
+    doc: "", status: "", escopo: "", faturado_por: ""
+  });
   const [all, setAll] = useState<Conta[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -626,91 +781,83 @@ export default function Dashboard({ dark = false, onToggleDark }: { dark?: boole
 
   const data = useMemo(() => {
     let d = all;
-    if (filters.ano !== "Todos") d = d.filter(c => (c.data_doc ?? c.prev_fat ?? "").startsWith(filters.ano));
-    if (filters.mes !== "Todos" && filters.ano !== "Todos") d = d.filter(c => (c.data_doc ?? c.prev_fat ?? "").startsWith(`${filters.ano}-${filters.mes}`));
-    if (filters.cliente !== "Todos") d = d.filter(c => c.cliente === filters.cliente);
-    if (filters.plataforma !== "Todos") d = d.filter(c => c.plataforma === filters.plataforma);
-    if (filters.doc !== "Todos") d = d.filter(c => c.doc === filters.doc);
+    if (filters.ano)        d = d.filter(c => (c.data_doc ?? "").startsWith(filters.ano));
+    if (filters.mes && filters.ano) d = d.filter(c => (c.data_doc ?? "").startsWith(`${filters.ano}-${filters.mes}`));
+    if (filters.cliente)    d = d.filter(c => c.cliente === filters.cliente);
+    if (filters.plataforma) d = d.filter(c => c.plataforma === filters.plataforma);
+    if (filters.doc)        d = d.filter(c => c.doc === filters.doc);
+    if (filters.escopo)     d = d.filter(c => c.escopo === filters.escopo);
+    if (filters.faturado_por) d = d.filter(c => (c.faturado_por ?? "").toLowerCase().includes(filters.faturado_por.toLowerCase()));
+    if (filters.status)     d = d.filter(c => c.status === filters.status);
     return d;
   }, [all, filters]);
 
-  const totalBruto = data.reduce((s, c) => s + (c.vl_bruto ?? 0), 0);
-  const f = (k: keyof Filters, v: string) => setFilters(prev => ({ ...prev, [k]: v }));
-
-  const selStyle: React.CSSProperties = { ...S.sel, padding: "6px 10px", fontSize: 11, outline: "none" };
-
   return (
     <div style={{ ...S.wrap }}>
-      {/* ── HEADER ── */}
-      <div style={{ ...S.neo, padding: "12px 20px", marginBottom: 12, display: "flex", alignItems: "center", gap: 12 }}>
-        <img src="/logo-icon.png" alt="Qualitech" style={{ height: 40, width: 40, objectFit: "contain", borderRadius: 10, flexShrink: 0 }} />
-        <div>
-          <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 16, color: T.text, letterSpacing: "-0.02em" }}>Qualitech</div>
-          <div style={{ fontSize: 10, color: T.muted, marginTop: -1 }}>Dashboard · Contas a Receber</div>
-        </div>
-        <div style={{ flex: 1 }} />
-        <div style={{ ...S.inset, padding: "8px 16px", display: "flex", gap: 24 }}>
-          <div>
-            <div style={{ fontSize: 9, color: T.muted, fontWeight: 700, textTransform: "uppercase" }}>Registros</div>
-            <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 16, color: T.accent }}>{data.length.toLocaleString("pt-BR")}</div>
-          </div>
-          <div>
-            <div style={{ fontSize: 9, color: T.muted, fontWeight: 700, textTransform: "uppercase" }}>Total Bruto</div>
-            <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 16, color: "#10b981" }}>{fmtK(totalBruto)}</div>
-          </div>
-        </div>
-        {onToggleDark && <button onClick={onToggleDark} style={{ ...S.btn(), padding: "8px 12px", fontSize: 16 }}>{dark ? "☀️" : "🌙"}</button>}
-      </div>
-
       {/* ── FILTERS ── */}
-      <div style={{ ...S.neo, padding: "10px 16px", marginBottom: 12, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}>
-        {(["ano","mes"] as const).map(k => (
-          <label key={k} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-            <span style={S.label}>{k === "ano" ? "Ano" : "Mês"}</span>
-            <select style={selStyle} value={filters[k]} onChange={e => f(k, e.target.value)}>
-              {k === "ano"
-                ? ["Todos","2023","2024","2025","2026"].map(v => <option key={v} value={v}>{v}</option>)
-                : ["Todos","01","02","03","04","05","06","07","08","09","10","11","12"].map(v => <option key={v} value={v}>{v}</option>)
-              }
-            </select>
-          </label>
-        ))}
-        <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+      <div style={{ ...S.neo, padding: "10px 16px", marginBottom: 12, display: "flex", flexWrap: "wrap" as const, gap: 8, alignItems: "flex-end" }}>
+        <div>
+          <span style={S.label}>Ano</span>
+          <select style={{ ...S.sel, padding: "6px 10px", fontSize: 11 }} value={filters.ano} onChange={e => setFilters(f => ({ ...f, ano: e.target.value }))}>
+            <option value="">Todos</option>
+            {["2023","2024","2025","2026"].map(v => <option key={v}>{v}</option>)}
+          </select>
+        </div>
+        <div>
+          <span style={S.label}>Mês</span>
+          <select style={{ ...S.sel, padding: "6px 10px", fontSize: 11 }} value={filters.mes} onChange={e => setFilters(f => ({ ...f, mes: e.target.value }))}>
+            <option value="">Todos</option>
+            {["01","02","03","04","05","06","07","08","09","10","11","12"].map(v => <option key={v}>{v}</option>)}
+          </select>
+        </div>
+        <div>
           <span style={S.label}>Cliente</span>
-          <select style={selStyle} value={filters.cliente} onChange={e => f("cliente", e.target.value)}>
-            <option value="Todos">Todos</option>
-            {meta.clientes.map(c => <option key={c} value={c}>{c}</option>)}
+          <select style={{ ...S.sel, padding: "6px 10px", fontSize: 11, minWidth: 130 }} value={filters.cliente} onChange={e => setFilters(f => ({ ...f, cliente: e.target.value }))}>
+            <option value="">Todos</option>
+            {meta.clientes.map(c => <option key={c}>{c}</option>)}
           </select>
-        </label>
-        <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+        </div>
+        <div>
           <span style={S.label}>Plataforma</span>
-          <select style={selStyle} value={filters.plataforma} onChange={e => f("plataforma", e.target.value)}>
-            <option value="Todos">Todos</option>
-            {meta.plataformas.slice(0,40).map(p => <option key={p} value={p}>{p}</option>)}
+          <select style={{ ...S.sel, padding: "6px 10px", fontSize: 11, minWidth: 130 }} value={filters.plataforma} onChange={e => setFilters(f => ({ ...f, plataforma: e.target.value }))}>
+            <option value="">Todos</option>
+            {meta.plataformas.slice(0,50).map(p => <option key={p}>{p}</option>)}
           </select>
-        </label>
-        <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-          <span style={S.label}>Doc.</span>
-          <select style={selStyle} value={filters.doc} onChange={e => f("doc", e.target.value)}>
-            {["Todos","NFSe","FAT. LOC.","DANFE","NFSe(ex)","Nota de Débito"].map(d => <option key={d} value={d}>{d}</option>)}
+        </div>
+        <div>
+          <span style={S.label}>Doc</span>
+          <select style={{ ...S.sel, padding: "6px 10px", fontSize: 11 }} value={filters.doc} onChange={e => setFilters(f => ({ ...f, doc: e.target.value }))}>
+            <option value="">Todos</option>
+            {["NFSe","FAT. LOC.","DANFE","NFSe(ex)","Nota de Débito"].map(d => <option key={d}>{d}</option>)}
           </select>
-        </label>
-        {(filters.ano !== "Todos" || filters.mes !== "Todos" || filters.cliente !== "Todos" || filters.plataforma !== "Todos" || filters.doc !== "Todos") && (
-          <button style={{ ...S.btn(), padding: "6px 12px", fontSize: 11, fontWeight: 700, color: "#ef4444", marginTop: 14 }}
-            onClick={() => setFilters({ ano: "Todos", mes: "Todos", cliente: "Todos", plataforma: "Todos", doc: "Todos" })}>
+        </div>
+        <div>
+          <span style={S.label}>Escopo</span>
+          <select style={{ ...S.sel, padding: "6px 10px", fontSize: 11 }} value={filters.escopo} onChange={e => setFilters(f => ({ ...f, escopo: e.target.value }))}>
+            <option value="">Todos</option>
+            {["SERVIÇO","LOCAÇÃO","VENDA","CRÉDITO"].map(v => <option key={v}>{v}</option>)}
+          </select>
+        </div>
+        <div>
+          <span style={S.label}>Fat. Por</span>
+          <select style={{ ...S.sel, padding: "6px 10px", fontSize: 11 }} value={filters.faturado_por} onChange={e => setFilters(f => ({ ...f, faturado_por: e.target.value }))}>
+            <option value="">Todos</option>
+            <option>Rio</option><option>Macaé</option>
+          </select>
+        </div>
+        <div>
+          <span style={S.label}>Status</span>
+          <select style={{ ...S.sel, padding: "6px 10px", fontSize: 11, minWidth: 140 }} value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}>
+            <option value="">Todos</option>
+            {["PAGO","Programado","Em andamento","Aguardando Pagamento","Aguardando Resposta do Cliente","Aguardando Documentação","Aguardando PO","Enviar NF","Previsão","Free Of Charge"].map(s => <option key={s}>{s}</option>)}
+          </select>
+        </div>
+        {Object.values(filters).some(v => v !== "") && (
+          <button style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444", fontSize: 11, fontWeight: 700, padding: "6px 10px", marginTop: 14 }}
+            onClick={() => setFilters({ ano: "", mes: "", cliente: "", plataforma: "", doc: "", status: "", escopo: "", faturado_por: "" })}>
             ✕ Limpar
           </button>
         )}
-      </div>
-
-      {/* ── NAV TABS ── */}
-      <div style={{ ...S.neo, padding: "8px 12px", marginBottom: 14, display: "flex", gap: 6, overflowX: "auto" }}>
-        {PAGES.map(p => (
-          <button key={p.id} onClick={() => setPage(p.id)}
-            style={{ ...S.btn(page === p.id), padding: "8px 14px", fontSize: 11, fontFamily: "'Syne',sans-serif", display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
-            <span>{p.icon}</span><span>{p.label}</span>
-          </button>
-        ))}
       </div>
 
       {/* ── ERROR ── */}
@@ -721,15 +868,27 @@ export default function Dashboard({ dark = false, onToggleDark }: { dark?: boole
         </div>
       )}
 
-      {/* ── PAGES ── */}
-      <div style={{ minHeight: 400 }}>
-        {page === "status"   && <PageStatus   data={data} S={S} T={T} />}
-        {page === "faturar"  && <PageFaturar  data={data} S={S} T={T} />}
-        {page === "doc"      && <PageDoc      data={data} S={S} T={T} />}
-        {page === "resposta" && <PageResposta data={data} S={S} T={T} />}
-        {page === "draft"    && <PageDraft    data={data} S={S} T={T} />}
-        {page === "mensal"   && <PageMensal   data={data} S={S} T={T} />}
-        {page === "cliente"  && <PageCliente  data={data} S={S} T={T} />}
+      {/* ── CONTENT + CALENDAR SIDEBAR ── */}
+      <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+        {/* Page content */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {loading && <div style={{ color: T.muted, fontSize: 13, padding: 20 }}>Carregando...</div>}
+          {!loading && (
+            <>
+              {page === "status"   && <PageStatus   data={data} S={S} T={T} />}
+              {page === "faturar"  && <PageFaturar  data={data} S={S} T={T} />}
+              {page === "doc"      && <PageDoc      data={data} S={S} T={T} />}
+              {page === "resposta" && <PageResposta data={data} S={S} T={T} />}
+              {page === "draft"    && <PageDraft    data={data} S={S} T={T} />}
+              {page === "mensal"   && <PageMensal   data={data} S={S} T={T} />}
+              {page === "cliente"  && <PageCliente  data={data} S={S} T={T} />}
+            </>
+          )}
+        </div>
+        {/* Calendar heatmap sidebar */}
+        <div style={{ width: 230, flexShrink: 0 }}>
+          <CalendarHeatmap data={data} filters={filters} S={S} T={T} />
+        </div>
       </div>
     </div>
   );
