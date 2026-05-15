@@ -1,5 +1,6 @@
 import Dashboard from "./Dashboard";
 import { useState, useEffect, useCallback } from "react";
+import { initMsal, getSpAccount, loginSharePoint, logoutSharePoint, postWOToSharePoint } from "./services/sharepoint";
 import { MOCK_CONTAS, MOCK_IMPOSTOS, MOCK_CLIENTES, MOCK_PROJETOS, MOCK_DRAFTS, MOCK_FERIADOS } from "./mockData";
 
 const DEMO = import.meta.env.VITE_DEMO === "true";
@@ -441,6 +442,10 @@ function ContasPage({ drafts, projetos, onDraftsChanged }: { drafts: Draft[]; pr
       else res = await apiFetch.post("/contas-receber/", conta);
       if (res?.detail || res?.error) { alert(`Erro ao salvar: ${res.detail || res.error}`); return; }
       setEditing(null); load();
+      if (!conta.id && getSpAccount()) {
+        postWOToSharePoint({ wo: conta.wo, cliente: conta.cliente, plataforma: conta.plataforma })
+          .catch(e => console.warn("SharePoint:", e.message));
+      }
     } catch (e: any) { alert(`Erro ao salvar: ${e.message || e}`); }
   };
 
@@ -662,6 +667,21 @@ function ContasPage({ drafts, projetos, onDraftsChanged }: { drafts: Draft[]; pr
   );
 }
 
+function exportCSV(filename: string, columns: { key: string; label: string }[], items: any[]) {
+  const keys = columns.map(c => c.key);
+  const header = columns.map(c => c.label).join(";");
+  const rows = items.map(row => keys.map(k => {
+    const v = row[k] ?? "";
+    const s = String(v).replace(/"/g, '""');
+    return s.includes(";") || s.includes('"') || s.includes("\n") ? `"${s}"` : s;
+  }).join(";"));
+  const csv = "﻿" + [header, ...rows].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ===== GENERIC CRUD =====
 function CRUDPage<T extends { id?: number }>({ title, icon, endpoint, columns, emptyItem, renderForm }: {
   title: string; icon: string; endpoint: string;
@@ -692,7 +712,10 @@ function CRUDPage<T extends { id?: number }>({ title, icon, endpoint, columns, e
       <div style={S.card}>
         <div style={S.cardHeader}>
           <span style={S.cardTitle}>{icon} {title} ({items.length})</span>
-          <button style={btn("#059669")} onClick={() => { setForm({ ...emptyItem }); setEditing({ ...emptyItem }); }}>➕ Novo</button>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button style={btn("#6366f1")} onClick={() => exportCSV(`${endpoint}.csv`, columns, items)} title="Exportar dados para importar no SharePoint">⬇ Exportar CSV</button>
+            <button style={btn("#059669")} onClick={() => { setForm({ ...emptyItem }); setEditing({ ...emptyItem }); }}>➕ Novo</button>
+          </div>
         </div>
         <div style={{ overflowX: "auto" }}>
           <table style={S.table}>
@@ -919,6 +942,7 @@ export default function App() {
   const [dark, setDark] = useState(() => localStorage.getItem("mos-dark") === "1");
   const [dashPage, setDashPage] = useState<string>("status");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [spAccount, setSpAccount] = useState<{ name?: string; username?: string } | null>(null);
 
   // Re-apply theme globals on every dark change
   const T = THEMES[dark ? "dark" : "light"];
@@ -941,6 +965,7 @@ export default function App() {
   useEffect(() => {
     reloadDrafts();
     apiFetch.get("/projetos/").then(d => setProjetos(Array.isArray(d) ? d : [])).catch(() => {});
+    initMsal().then(() => setSpAccount(getSpAccount())).catch(() => {});
   }, []);
 
   const tabs: { key: Tab; label: string }[] = [
@@ -961,6 +986,18 @@ export default function App() {
           <div style={{ fontSize: 11, color: T.muted }}>Offshore Workboard · Qualtech IRM</div>
         </div>
         <div style={{ flex: 1 }} />
+        {spAccount ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 11, color: T.muted }}>🔗 {spAccount.name || spAccount.username}</span>
+            <button onClick={() => logoutSharePoint().then(() => setSpAccount(null))}
+              style={{ ...btn("#64748b"), fontSize: 11, padding: "4px 10px" }}>Sair SP</button>
+          </div>
+        ) : (
+          <button onClick={() => loginSharePoint().then(a => setSpAccount(a)).catch(e => alert("Erro login: " + e.message))}
+            style={{ ...btn("#0078d4"), fontSize: 11, padding: "5px 12px" }}>
+            🔑 Entrar (SharePoint)
+          </button>
+        )}
         <button onClick={toggleDark} title={dark ? "Modo claro" : "Modo escuro"}
           style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, padding: "4px 8px", borderRadius: 8, color: T.muted, transition: "color .2s" }}>
           {dark ? "☀️" : "🌙"}
