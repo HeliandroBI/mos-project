@@ -459,11 +459,16 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      Object.entries(filters).forEach(([k, v]) => { if (v && !k.startsWith("_")) params.append(k, String(v)); });
-      params.append("limit", "500");
-      const r = await fetch(`${API}/contas-receber/?${params}`);
-      const data = await r.json();
+      let data: any;
+      if (DEMO) {
+        data = MOCK_CONTAS;
+      } else {
+        const params = new URLSearchParams();
+        Object.entries(filters).forEach(([k, v]) => { if (v && !k.startsWith("_")) params.append(k, String(v)); });
+        params.append("limit", "500");
+        const r = await fetch(`${API}/contas-receber/?${params}`);
+        data = await r.json();
+      }
       if (Array.isArray(data)) {
         setItems(data);
         setTotal({ total: data.length, total_bruto: data.reduce((s: number, x: ContaReceber) => s + (x.vl_bruto || 0), 0), total_liquido: data.reduce((s: number, x: ContaReceber) => s + (x.vl_liquido || 0), 0) });
