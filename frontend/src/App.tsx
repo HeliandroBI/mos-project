@@ -1,6 +1,6 @@
 import Dashboard from "./Dashboard";
 import { useState, useEffect, useCallback } from "react";
-import { initMsal, getSpAccount, loginSharePoint, logoutSharePoint, postWOToSharePoint } from "./services/sharepoint";
+import { initMsal, getSpAccount, loginSharePoint, logoutSharePoint, postWOToSharePoint, getListItems } from "./services/sharepoint";
 import { MOCK_CONTAS, MOCK_IMPOSTOS, MOCK_CLIENTES, MOCK_PROJETOS, MOCK_DRAFTS, MOCK_FERIADOS } from "./mockData";
 
 const DEMO = import.meta.env.VITE_DEMO === "true";
@@ -56,7 +56,7 @@ const fmt = {
 };
 
 const THEMES = {
-  light: { bg: "#e8edf2", card: "#edf0f5", shadowD: "#c8cdd6", shadowL: "#ffffff", text: "#1e293b", muted: "#64748b", accent: "#1a5ea8" },
+  light: { bg: "#E9EDF0", card: "#EDF1F4", shadowD: "#c8cdd6", shadowL: "#ffffff", text: "#1e293b", muted: "#64748b", accent: "#1a5ea8" },
   dark:  { bg: "#151924", card: "#1b2030", shadowD: "#10131c", shadowL: "#222840", text: "#e2e8f0", muted: "#94a3b8", accent: "#60a5fa" },
 };
 
@@ -167,13 +167,22 @@ function calcImpostos(f: ContaReceber): Partial<ContaReceber> {
 }
 
 // ===== CONTA FORM =====
-function ContaForm({ conta, onSave, onClose, drafts, projetos, onDraftsChanged }: { conta: ContaReceber; onSave: (c: ContaReceber) => void; onClose: () => void; drafts: Draft[]; projetos: Projeto[]; onDraftsChanged?: () => void }) {
+function ContaForm({ conta, onSave, onClose, drafts, projetos, onDraftsChanged, spAccount }: { conta: ContaReceber; onSave: (c: ContaReceber) => void; onClose: () => void; drafts: Draft[]; projetos: Projeto[]; onDraftsChanged?: () => void; spAccount?: { name?: string; username?: string } | null }) {
   // Para nova conta, draft_id=0 significa "criar nova draft ao salvar"
   const defaultDraftId = !conta.id ? 0 : (conta.draft_id ?? 0);
   const [form, setForm] = useState<ContaReceber>({ ...conta, draft_id: defaultDraftId });
   const [projData, setProjData] = useState<{ vl_diaria?: number; vl_diaria_locacao?: number; vl_outros?: number }>({});
   const [closeHover, setCloseHover] = useState(false);
+  const [spWOs, setSpWOs] = useState<any[]>([]);
   const proximoCodigo = drafts[0] ? drafts[0].codigo + 1 : 1;
+
+  useEffect(() => {
+    if (spAccount) {
+      getListItems('ListaWOs')
+        .then(items => setSpWOs(items))
+        .catch(err => console.error('Erro ao buscar ListaWOs:', err));
+    }
+  }, [spAccount]);
 
   const calcVlBruto = (f: ContaReceber, pd: typeof projData): number | undefined => {
     if (!f.data_inicio || !f.data_fim) return undefined;
@@ -220,6 +229,20 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, onDraftsChanged }
   };
 
   const applyWO = (woNum: number) => {
+    // Try SharePoint first if logged in
+    if (spAccount && spWOs.length > 0) {
+      const spItem = spWOs.find(item => parseInt(item.WO || item.wo) === woNum);
+      if (spItem) {
+        const cliente = spItem.Client || spItem.cliente || '';
+        const plataforma = spItem.Rig || spItem.plataforma || '';
+        const updated = { ...form, wo: woNum, cliente, plataforma, coord_focal: form.coord_focal };
+        setProjData({ vl_diaria: undefined, vl_diaria_locacao: undefined, vl_outros: undefined });
+        setForm(updated);
+        return;
+      }
+    }
+
+    // Fall back to backend projetos
     const proj = projetos.find(p => p.wo === woNum);
     if (!proj) return;
     const pd = { vl_diaria: proj.vl_diaria, vl_diaria_locacao: proj.vl_diaria_locacao, vl_outros: proj.vl_outros };
@@ -249,6 +272,14 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, onDraftsChanged }
       } catch { /* ignora se já existe, segue sem draft */ }
     }
     onSave(finalForm);
+    // Post to SharePoint if logged in
+    if (spAccount && finalForm.wo && finalForm.cliente && finalForm.plataforma) {
+      try {
+        await postWOToSharePoint({ wo: finalForm.wo, cliente: finalForm.cliente, plataforma: finalForm.plataforma });
+      } catch (err) {
+        console.warn('Aviso: não foi possível sincronizar com SharePoint', err);
+      }
+    }
   };
 
   return (
@@ -281,6 +312,16 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, onDraftsChanged }
             <Field label="WO (Project Number)">
               <select style={S.select} value={form.wo || ""} onChange={e => applyWO(+e.target.value)}>
                 <option value="">Selecione a WO...</option>
+                {spAccount && spWOs.length > 0 ? (
+                  <>
+                    {spWOs.map((item, i) => {
+                      const woNum = parseInt(item.WO || item.wo);
+                      const cliente = item.Client || item.cliente || '';
+                      return <option key={`sp-${i}`} value={woNum}>{woNum}{cliente ? ` — ${cliente}` : ""}{item.Rig || item.plataforma ? ` · ${item.Rig || item.plataforma}` : ""}</option>;
+                    })}
+                    {projetos.length > 0 && <option disabled>─── Backend ───</option>}
+                  </>
+                ) : null}
                 {projetos.map(p => (
                   <option key={p.wo} value={p.wo}>{p.wo}{p.cliente ? ` — ${p.cliente}` : ""}{p.plataforma ? ` · ${p.plataforma}` : ""}</option>
                 ))}
@@ -383,7 +424,7 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, onDraftsChanged }
 }
 
 // ===== CONTAS PAGE =====
-function ContasPage({ drafts, projetos, onDraftsChanged }: { drafts: Draft[]; projetos: Projeto[]; onDraftsChanged?: () => void }) {
+function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: Draft[]; projetos: Projeto[]; onDraftsChanged?: () => void; spAccount?: { name?: string; username?: string } | null }) {
   const [items, setItems] = useState<ContaReceber[]>([]);
   const [total, setTotal] = useState({ total: 0, total_bruto: 0, total_liquido: 0 });
   const [filters, setFilters] = useState<any>({});
@@ -442,10 +483,6 @@ function ContasPage({ drafts, projetos, onDraftsChanged }: { drafts: Draft[]; pr
       else res = await apiFetch.post("/contas-receber/", conta);
       if (res?.detail || res?.error) { alert(`Erro ao salvar: ${res.detail || res.error}`); return; }
       setEditing(null); load();
-      if (!conta.id && getSpAccount()) {
-        postWOToSharePoint({ wo: conta.wo, cliente: conta.cliente, plataforma: conta.plataforma })
-          .catch(e => console.warn("SharePoint:", e.message));
-      }
     } catch (e: any) { alert(`Erro ao salvar: ${e.message || e}`); }
   };
 
@@ -655,7 +692,7 @@ function ContasPage({ drafts, projetos, onDraftsChanged }: { drafts: Draft[]; pr
           </table>
         </div>
       </div>
-      {editing !== null && <ContaForm conta={editing} onSave={save} onClose={() => setEditing(null)} drafts={drafts} projetos={projetos} onDraftsChanged={onDraftsChanged} />}
+      {editing !== null && <ContaForm conta={editing} onSave={save} onClose={() => setEditing(null)} drafts={drafts} projetos={projetos} onDraftsChanged={onDraftsChanged} spAccount={spAccount} />}
       {delTarget && (
         <DeleteModal
           info={`WO ${delTarget.wo} | ${delTarget.cliente} | ${delTarget.plataforma} | ${delTarget.doc || "-"} | Status: ${delTarget.status}`}
@@ -965,7 +1002,7 @@ export default function App() {
   useEffect(() => {
     reloadDrafts();
     apiFetch.get("/projetos/").then(d => setProjetos(Array.isArray(d) ? d : [])).catch(() => {});
-    initMsal().then(() => setSpAccount(getSpAccount())).catch(() => {});
+    if (!DEMO) initMsal().then(() => setSpAccount(getSpAccount())).catch(() => {});
   }, []);
 
   const tabs: { key: Tab; label: string }[] = [
@@ -982,22 +1019,10 @@ export default function App() {
       <div style={S.header}>
         <img src={dark ? "/logo-full-dark.png" : "/logo-full.png"} alt="Qualitech" style={{ height: 36, objectFit: "contain" }} />
         <div>
-          <div style={{ fontWeight: 800, fontSize: 16, color: T.text }}>MOS — Contas a Receber</div>
+          <div style={{ fontWeight: 800, fontSize: 16, color: T.text }}>QT - FIN - Contas a Receber</div>
           <div style={{ fontSize: 11, color: T.muted }}>Offshore Workboard · Qualtech IRM</div>
         </div>
         <div style={{ flex: 1 }} />
-        {spAccount ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 11, color: T.muted }}>🔗 {spAccount.name || spAccount.username}</span>
-            <button onClick={() => logoutSharePoint().then(() => setSpAccount(null))}
-              style={{ ...btn("#64748b"), fontSize: 11, padding: "4px 10px" }}>Sair SP</button>
-          </div>
-        ) : (
-          <button onClick={() => loginSharePoint().then(a => setSpAccount(a)).catch(e => alert("Erro login: " + e.message))}
-            style={{ ...btn("#0078d4"), fontSize: 11, padding: "5px 12px" }}>
-            🔑 Entrar (SharePoint)
-          </button>
-        )}
         <button onClick={toggleDark} title={dark ? "Modo claro" : "Modo escuro"}
           style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, padding: "4px 8px", borderRadius: 8, color: T.muted, transition: "color .2s" }}>
           {dark ? "☀️" : "🌙"}
@@ -1086,7 +1111,7 @@ export default function App() {
       </div>
 
       {tab === "dashboard" && <Dashboard dark={dark} onToggleDark={toggleDark} page={dashPage} onPageChange={setDashPage} />}
-      {tab === "contas" && <ContasPage drafts={drafts} projetos={projetos} onDraftsChanged={reloadDrafts} />}
+      {tab === "contas" && <ContasPage drafts={drafts} projetos={projetos} onDraftsChanged={reloadDrafts} spAccount={spAccount} />}
 
       {tab === "impostos" && <CRUDPage<Imposto> title="Impostos" icon="🧾" endpoint="impostos"
         columns={[{ key: "nome", label: "Imposto" }, { key: "tipo", label: "Tipo", render: v => <Badge text={v === "retido_fonte" ? "Retido" : "A Pagar"} /> }, { key: "tipo_documento", label: "Documento" }, { key: "tipo_servico", label: "Tipo Serviço" }, { key: "cidade", label: "Cidade" }, { key: "aliquota", label: "Alíquota", render: v => <strong style={{ color: "#dc2626" }}>{fmt.pct(v)}</strong> }, { key: "vigencia_inicio", label: "Vigência", render: v => fmt.date(v) }]}

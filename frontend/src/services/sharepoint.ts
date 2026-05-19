@@ -28,6 +28,41 @@ export async function logoutSharePoint() {
   if (account) await msalInstance.logoutPopup({ account });
 }
 
+export async function getListItems(listName: string): Promise<any[]> {
+  const account = getSpAccount();
+  if (!account) return [];
+
+  const cacheKey = `sp-list-${listName}`;
+  const cached = sessionStorage.getItem(cacheKey);
+  if (cached) {
+    const { data, timestamp } = JSON.parse(cached);
+    if (Date.now() - timestamp < 5 * 60 * 1000) return data;
+  }
+
+  let token: string;
+  try {
+    const res = await msalInstance.acquireTokenSilent({ scopes: SP_SCOPES, account });
+    token = res.accessToken;
+  } catch {
+    const res = await msalInstance.acquireTokenPopup({ scopes: SP_SCOPES, account });
+    token = res.accessToken;
+  }
+
+  const response = await fetch(`${SITE}/_api/web/lists/getbytitle('${listName}')/items?$select=*&$top=5000`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/json;odata=verbose',
+    },
+  });
+
+  if (!response.ok) throw new Error(`SharePoint: ${response.status}`);
+  const result = await response.json();
+  const items = result.d.results || [];
+
+  sessionStorage.setItem(cacheKey, JSON.stringify({ data: items, timestamp: Date.now() }));
+  return items;
+}
+
 export async function postWOToSharePoint(data: { wo?: number; cliente?: string; plataforma?: string }) {
   const account = getSpAccount();
   if (!account) throw new Error('Não autenticado no SharePoint');
