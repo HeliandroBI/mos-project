@@ -2,8 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.db.database import SessionLocal, Base, engine
 from app.api.routes import setup, qualtech
-from app.routers import impostos, clientes_prazos, projetos, drafts, feriados, contas_receber
-from app.models.models import Imposto, ClientePrazo, Draft, Feriado
+from app.routers import impostos, clientes_prazos, projetos, drafts, feriados, contas_receber, dimensoes
+from app.models.models import Imposto, ClientePrazo, Draft, Feriado, StatusConta, TipoServicoD, EmpresaFaturamento
 from datetime import date
 
 app = FastAPI(title="MOS - Offshore Workboard", version="1.0.0")
@@ -24,6 +24,7 @@ app.include_router(projetos.router,            prefix="/api/projetos",          
 app.include_router(drafts.router,              prefix="/api/drafts",             tags=["Drafts"])
 app.include_router(feriados.router,            prefix="/api/feriados",           tags=["Feriados"])
 app.include_router(contas_receber.router,      prefix="/api/contas-receber",     tags=["Contas a Receber"])
+app.include_router(dimensoes.router,           prefix="/api/dim",                tags=["Dimensões"])
 
 @app.on_event("startup")
 def startup():
@@ -72,6 +73,34 @@ def seed_initial_data():
             ]
             for h in feriados:
                 db.add(Feriado(data=h[0], nome=h[1], tipo=h[2], estado=h[3]))
+
+        if db.query(TipoServicoD).count() == 0:
+            db.add_all([
+                TipoServicoD(codigo="SERVIÇO",  descricao="Prestação de Serviço", gera_iss=True),
+                TipoServicoD(codigo="LOCAÇÃO",  descricao="Locação de Equipamento", gera_iss=False),
+                TipoServicoD(codigo="VENDA",    descricao="Venda de Material", gera_iss=False),
+                TipoServicoD(codigo="CRÉDITO",  descricao="Nota de Crédito", gera_iss=False),
+            ])
+
+        if db.query(StatusConta).count() == 0:
+            db.add_all([
+                StatusConta(nome="Programado",                    ordem=1,  cor="#64748b", grupo="Em andamento"),
+                StatusConta(nome="Em andamento",                  ordem=2,  cor="#3b82f6", grupo="Em andamento"),
+                StatusConta(nome="Enviar NF",                     ordem=3,  cor="#f59e0b", grupo="Em andamento"),
+                StatusConta(nome="Aguardando Documentação",       ordem=4,  cor="#f97316", grupo="Bloqueado"),
+                StatusConta(nome="Aguardando Resposta do Cliente",ordem=5,  cor="#a855f7", grupo="Bloqueado"),
+                StatusConta(nome="Aguardando PO",                 ordem=6,  cor="#ec4899", grupo="Bloqueado"),
+                StatusConta(nome="Aguardando Pagamento",          ordem=7,  cor="#0891b2", grupo="Em andamento"),
+                StatusConta(nome="PAGO",                          ordem=8,  cor="#059669", grupo="Concluído"),
+                StatusConta(nome="Free Of Charge",                ordem=9,  cor="#6b7280", grupo="Concluído"),
+                StatusConta(nome="Previsão",                      ordem=10, cor="#94a3b8", grupo="Em andamento"),
+            ])
+
+        if db.query(EmpresaFaturamento).count() == 0:
+            db.add_all([
+                EmpresaFaturamento(nome="Qualtech IRM Rio",   cidade="Rio de Janeiro", uf="RJ"),
+                EmpresaFaturamento(nome="Qualtech IRM Macaé", cidade="Macaé",          uf="RJ"),
+            ])
 
         db.commit()
     finally:

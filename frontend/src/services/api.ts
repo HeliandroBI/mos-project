@@ -42,3 +42,18 @@ export const projectsAPI = {
 export const qualtechAPI = {
   listProjects: (wo: string) => api.get<any>('/qualtech/projects', { params: { wo } }),
 }
+
+const dim = (recurso: string) => ({
+  list:   ()              => api.get<any>(`/api/dim/${recurso}/`),
+  get:    (id: number)    => api.get<any>(`/api/dim/${recurso}/${id}`),
+  create: (data: any)     => api.post<any>(`/api/dim/${recurso}/`, data),
+  update: (id: number, data: any) => api.put<any>(`/api/dim/${recurso}/${id}`, data),
+  delete: (id: number)    => api.delete(`/api/dim/${recurso}/${id}`),
+})
+
+export const clientesAPI       = dim('clientes')
+export const plataformasAPI    = dim('plataformas')
+export const coordenadoresAPI  = dim('coordenadores')
+export const tiposServicoAPI   = dim('tipos-servico')
+export const statusAPI         = dim('status')
+export const empresasAPI       = dim('empresas')

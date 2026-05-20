@@ -153,3 +153,95 @@ class ImportCSVResponse(BaseModel):
     importados: int
     erros: int
     mensagens: List[str]
+
+# ── DIMENSÕES ─────────────────────────────────────────────────────────────────
+
+class ClienteBase(BaseModel):
+    codigo: Optional[str] = None
+    nome: str
+    cnpj: Optional[str] = None
+    contato: Optional[str] = None
+    email: Optional[str] = None
+    pais: str = "Brasil"
+    ativo: bool = True
+
+class ClienteCreate(ClienteBase): pass
+class ClienteUpdate(ClienteBase): pass
+class ClienteOut(ClienteBase):
+    id: int
+    criado_em: Optional[datetime] = None
+    atualizado_em: Optional[datetime] = None
+    class Config: from_attributes = True
+
+class PlataformaBase(BaseModel):
+    nome: str
+    tipo: Optional[str] = None
+    cliente_id: Optional[int] = None
+    bandeira: Optional[str] = None
+    ativo: bool = True
+
+class PlataformaCreate(PlataformaBase): pass
+class PlataformaUpdate(PlataformaBase): pass
+class PlataformaOut(PlataformaBase):
+    id: int
+    cliente_nome: Optional[str] = None
+    criado_em: Optional[datetime] = None
+    atualizado_em: Optional[datetime] = None
+    class Config: from_attributes = True
+
+class CoordenadorBase(BaseModel):
+    nome: str
+    sigla: Optional[str] = None
+    email: Optional[str] = None
+    area: Optional[str] = None
+    ativo: bool = True
+
+class CoordenadorCreate(CoordenadorBase): pass
+class CoordenadorUpdate(CoordenadorBase): pass
+class CoordenadorOut(CoordenadorBase):
+    id: int
+    criado_em: Optional[datetime] = None
+    atualizado_em: Optional[datetime] = None
+    class Config: from_attributes = True
+
+class TipoServicoBase(BaseModel):
+    codigo: str
+    descricao: Optional[str] = None
+    gera_iss: bool = True
+    ativo: bool = True
+
+class TipoServicoCreate(TipoServicoBase): pass
+class TipoServicoUpdate(TipoServicoBase): pass
+class TipoServicoOut(TipoServicoBase):
+    id: int
+    criado_em: Optional[datetime] = None
+    class Config: from_attributes = True
+
+class StatusContaBase(BaseModel):
+    nome: str
+    ordem: int = 0
+    cor: Optional[str] = None
+    grupo: Optional[str] = None
+    ativo: bool = True
+
+class StatusContaCreate(StatusContaBase): pass
+class StatusContaUpdate(StatusContaBase): pass
+class StatusContaOut(StatusContaBase):
+    id: int
+    criado_em: Optional[datetime] = None
+    class Config: from_attributes = True
+
+class EmpresaFaturamentoBase(BaseModel):
+    nome: str
+    cnpj: Optional[str] = None
+    cidade: Optional[str] = None
+    uf: Optional[str] = None
+    ativo: bool = True
+
+class EmpresaFaturamentoCreate(EmpresaFaturamentoBase): pass
+class EmpresaFaturamentoUpdate(EmpresaFaturamentoBase): pass
+class EmpresaFaturamentoOut(EmpresaFaturamentoBase):
+    id: int
+    criado_em: Optional[datetime] = None
+    atualizado_em: Optional[datetime] = None
+    class Config: from_attributes = True

@@ -15,7 +15,8 @@ const MOCK_MAP: Record<string, any[]> = {
   "/feriados/": MOCK_FERIADOS,
 };
 
-type Tab = "contas" | "dashboard" | "impostos" | "clientes" | "projetos" | "drafts" | "feriados";
+type Tab = "contas" | "dashboard" | "impostos" | "clientes" | "projetos" | "drafts" | "feriados"
+         | "dim_clientes" | "dim_plataformas" | "dim_coordenadores" | "dim_tipos_servico" | "dim_status" | "dim_empresas";
 
 interface ContaReceber {
   id?: number; wo?: number; draft_id?: number; draft_codigo?: number; _novaDraft?: boolean;
@@ -102,8 +103,8 @@ const STATUS_COLORS: Record<string, [string, string]> = {
   "Previsão": ["#f3e8ff", "#6b21a8"], "Enviar NF": ["#ffedd5", "#9a3412"],
 };
 
-const Badge = ({ text, doc }: { text: string; doc?: boolean }) => {
-  const [bg, color] = doc ? ["#dbeafe", "#1e40af"] : (STATUS_COLORS[text] || ["#f1f5f9", "#475569"]);
+const Badge = ({ text, doc, color: customColor }: { text: string; doc?: boolean; color?: string }) => {
+  const [bg, color] = customColor ? [customColor + "22", customColor] : doc ? ["#dbeafe", "#1e40af"] : (STATUS_COLORS[text] || ["#f1f5f9", "#475569"]);
   return <span style={{ background: bg, color, padding: "2px 8px", borderRadius: 12, fontSize: 10, fontWeight: 700, whiteSpace: "nowrap" as const }}>{text}</span>;
 };
 
@@ -725,8 +726,8 @@ function exportCSV(filename: string, columns: { key: string; label: string }[], 
 }
 
 // ===== GENERIC CRUD =====
-function CRUDPage<T extends { id?: number }>({ title, icon, endpoint, columns, emptyItem, renderForm }: {
-  title: string; icon: string; endpoint: string;
+function CRUDPage<T extends { id?: number }>({ title, icon, endpoint, columns, emptyItem, renderForm, info }: {
+  title: string; icon: string; endpoint: string; info?: string;
   columns: { key: string; label: string; render?: (v: any, row: T) => React.ReactNode }[];
   emptyItem: T; renderForm: (form: T, set: (k: keyof T, v: any) => void) => React.ReactNode;
 }) {
@@ -751,6 +752,9 @@ function CRUDPage<T extends { id?: number }>({ title, icon, endpoint, columns, e
 
   return (
     <div style={S.page}>
+      {info && <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 10, padding: "8px 14px", marginBottom: 10, fontSize: 12, color: "#1e40af" }}>
+        📋 <strong>SharePoint:</strong> {info}
+      </div>}
       <div style={S.card}>
         <div style={S.cardHeader}>
           <span style={S.cardTitle}>{icon} {title} ({items.length})</span>
@@ -1064,7 +1068,7 @@ export default function App() {
         {/* ⚙️ fora do nav — dropdown abre livremente para baixo/esquerda */}
         <div style={{ position: "relative", flexShrink: 0 }} onMouseDown={e => e.stopPropagation()}>
           <button
-            style={{ ...navBtn(["impostos","clientes","projetos","drafts","feriados"].includes(tab)),
+            style={{ ...navBtn(["impostos","clientes","projetos","drafts","feriados","dim_clientes","dim_plataformas","dim_coordenadores","dim_tipos_servico","dim_status","dim_empresas"].includes(tab)),
               padding: "8px 14px", background: N.card,
               boxShadow: `4px 4px 10px ${N.shadowD}, -2px -2px 6px ${N.shadowL}`,
               borderRadius: 10, display: "flex", alignItems: "center", gap: 6 }}
@@ -1087,11 +1091,17 @@ export default function App() {
               display: "flex", flexDirection: "row", whiteSpace: "nowrap" as const,
             }}>
               {[
-                { key: "impostos" as Tab, icon: "⚙️",  label: "Impostos" },
-                { key: "clientes" as Tab, icon: "👥",  label: "Clientes / Prazos" },
-                { key: "projetos" as Tab, icon: "🏗",  label: "Projetos (WO)" },
-                { key: "drafts"   as Tab, icon: "📝",  label: "Drafts" },
-                { key: "feriados" as Tab, icon: "📅",  label: "Feriados" },
+                { key: "impostos"           as Tab, icon: "⚙️",  label: "Impostos" },
+                { key: "clientes"           as Tab, icon: "👥",  label: "Clientes / Prazos" },
+                { key: "projetos"           as Tab, icon: "🏗",  label: "Projetos (WO)" },
+                { key: "drafts"             as Tab, icon: "📝",  label: "Drafts" },
+                { key: "feriados"           as Tab, icon: "📅",  label: "Feriados" },
+                { key: "dim_clientes"       as Tab, icon: "🏢",  label: "SP · Clientes" },
+                { key: "dim_plataformas"    as Tab, icon: "🛢",  label: "SP · Plataformas" },
+                { key: "dim_coordenadores"  as Tab, icon: "👤",  label: "SP · Coordenadores" },
+                { key: "dim_tipos_servico"  as Tab, icon: "🔧",  label: "SP · Tipos Serviço" },
+                { key: "dim_status"         as Tab, icon: "🎨",  label: "SP · Status" },
+                { key: "dim_empresas"       as Tab, icon: "🏦",  label: "SP · Empresas Fat." },
               ].map((item, i, arr) => (
                 <button key={item.key}
                   onClick={() => { setTab(item.key); setSettingsOpen(false); }}
@@ -1105,6 +1115,7 @@ export default function App() {
                     fontWeight: tab === item.key ? 700 : 400,
                     display: "flex", alignItems: "center", gap: 6,
                     transition: "background .12s",
+                    borderTop: item.key === "dim_clientes" ? `1px solid ${N.shadowD}` : undefined,
                   }}>
                   <span>{item.icon}</span><span>{item.label}</span>
                 </button>
@@ -1165,6 +1176,126 @@ export default function App() {
         </>)} />}
 
       {tab === "drafts" && <DraftsPage onDraftsChanged={reloadDrafts} />}
+
+      {/* ── DIMENSÕES SHAREPOINT ── */}
+      {tab === "dim_clientes" && <CRUDPage<any> title="Clientes" icon="🏢" endpoint="dim/clientes"
+        info="Dimensão SharePoint — indexar por: Nome (único), Código. Use como lookup em WOs e Contas a Receber."
+        columns={[
+          { key: "codigo",  label: "Código" },
+          { key: "nome",    label: "Nome", render: v => <strong>{v}</strong> },
+          { key: "cnpj",    label: "CNPJ" },
+          { key: "contato", label: "Contato" },
+          { key: "email",   label: "E-mail" },
+          { key: "pais",    label: "País" },
+          { key: "ativo",   label: "Ativo", render: v => v ? "✅" : "❌" },
+        ]}
+        emptyItem={{ codigo: "", nome: "", cnpj: "", contato: "", email: "", pais: "Brasil", ativo: true }}
+        renderForm={(f, set) => (<>
+          <Field label="Nome *"><input style={S.input} value={f.nome || ""} onChange={e => set("nome", e.target.value)} /></Field>
+          <Field label="Código"><input style={S.input} value={f.codigo || ""} onChange={e => set("codigo", e.target.value)} /></Field>
+          <Field label="CNPJ"><input style={S.input} value={f.cnpj || ""} onChange={e => set("cnpj", e.target.value)} /></Field>
+          <Field label="Contato"><input style={S.input} value={f.contato || ""} onChange={e => set("contato", e.target.value)} /></Field>
+          <Field label="E-mail"><input style={S.input} value={f.email || ""} onChange={e => set("email", e.target.value)} /></Field>
+          <Field label="País"><input style={S.input} value={f.pais || "Brasil"} onChange={e => set("pais", e.target.value)} /></Field>
+        </>)} />}
+
+      {tab === "dim_plataformas" && <CRUDPage<any> title="Plataformas / Rigs" icon="🛢" endpoint="dim/plataformas"
+        info="Dimensão SharePoint — indexar por: Nome (único), Tipo, Cliente (lookup). Relaciona com Clientes."
+        columns={[
+          { key: "nome",      label: "Nome", render: v => <strong>{v}</strong> },
+          { key: "tipo",      label: "Tipo" },
+          { key: "cliente_id",label: "Cliente ID" },
+          { key: "bandeira",  label: "Bandeira" },
+          { key: "ativo",     label: "Ativo", render: v => v ? "✅" : "❌" },
+        ]}
+        emptyItem={{ nome: "", tipo: "", cliente_id: null, bandeira: "", ativo: true }}
+        renderForm={(f, set) => (<>
+          <Field label="Nome *"><input style={S.input} value={f.nome || ""} onChange={e => set("nome", e.target.value)} /></Field>
+          <Field label="Tipo">
+            <select style={S.select} value={f.tipo || ""} onChange={e => set("tipo", e.target.value)}>
+              <option value="">—</option>
+              {["FPSO","Semisubmersível","Drillship","Jack-up","Plataforma Fixa","Navio"].map(t => <option key={t}>{t}</option>)}
+            </select>
+          </Field>
+          <Field label="Bandeira"><input style={S.input} value={f.bandeira || ""} onChange={e => set("bandeira", e.target.value)} /></Field>
+          <Field label="Cliente ID (lookup)"><input type="number" style={S.input} value={f.cliente_id || ""} onChange={e => set("cliente_id", e.target.value ? +e.target.value : null)} /></Field>
+        </>)} />}
+
+      {tab === "dim_coordenadores" && <CRUDPage<any> title="Coordenadores Focais" icon="👤" endpoint="dim/coordenadores"
+        info="Dimensão SharePoint — indexar por: Sigla (única), Nome. Use como lookup em WOs e Contas a Receber."
+        columns={[
+          { key: "sigla",  label: "Sigla", render: v => <Badge text={v || "—"} /> },
+          { key: "nome",   label: "Nome", render: v => <strong>{v}</strong> },
+          { key: "email",  label: "E-mail" },
+          { key: "area",   label: "Área" },
+          { key: "ativo",  label: "Ativo", render: v => v ? "✅" : "❌" },
+        ]}
+        emptyItem={{ nome: "", sigla: "", email: "", area: "", ativo: true }}
+        renderForm={(f, set) => (<>
+          <Field label="Nome *"><input style={S.input} value={f.nome || ""} onChange={e => set("nome", e.target.value)} /></Field>
+          <Field label="Sigla (ex: AS, GR)"><input style={S.input} maxLength={10} value={f.sigla || ""} onChange={e => set("sigla", e.target.value.toUpperCase())} /></Field>
+          <Field label="E-mail"><input style={S.input} value={f.email || ""} onChange={e => set("email", e.target.value)} /></Field>
+          <Field label="Área"><input style={S.input} value={f.area || ""} onChange={e => set("area", e.target.value)} /></Field>
+        </>)} />}
+
+      {tab === "dim_tipos_servico" && <CRUDPage<any> title="Tipos de Serviço" icon="🔧" endpoint="dim/tipos-servico"
+        info="Dimensão SharePoint — Choice delegável. Indexar por: Código. Controla se gera ISS."
+        columns={[
+          { key: "codigo",    label: "Código", render: v => <Badge text={v} /> },
+          { key: "descricao", label: "Descrição" },
+          { key: "gera_iss",  label: "Gera ISS", render: v => v ? "✅ Sim" : "❌ Não" },
+          { key: "ativo",     label: "Ativo", render: v => v ? "✅" : "❌" },
+        ]}
+        emptyItem={{ codigo: "", descricao: "", gera_iss: true, ativo: true }}
+        renderForm={(f, set) => (<>
+          <Field label="Código *"><input style={S.input} value={f.codigo || ""} onChange={e => set("codigo", e.target.value.toUpperCase())} /></Field>
+          <Field label="Descrição"><input style={S.input} value={f.descricao || ""} onChange={e => set("descricao", e.target.value)} /></Field>
+          <Field label="Gera ISS">
+            <select style={S.select} value={f.gera_iss ? "1" : "0"} onChange={e => set("gera_iss", e.target.value === "1")}>
+              <option value="1">Sim</option>
+              <option value="0">Não</option>
+            </select>
+          </Field>
+        </>)} />}
+
+      {tab === "dim_status" && <CRUDPage<any> title="Pipeline de Status" icon="🎨" endpoint="dim/status"
+        info="Dimensão SharePoint — indexar por: Nome, Ordem, Grupo. Ordem define a sequência no pipeline."
+        columns={[
+          { key: "ordem",  label: "Ordem" },
+          { key: "nome",   label: "Status", render: (v, row) => <Badge text={v} color={row.cor} /> },
+          { key: "grupo",  label: "Grupo" },
+          { key: "cor",    label: "Cor", render: v => v ? <span style={{ display: "inline-block", width: 16, height: 16, borderRadius: 4, background: v, verticalAlign: "middle" }} /> : "—" },
+          { key: "ativo",  label: "Ativo", render: v => v ? "✅" : "❌" },
+        ]}
+        emptyItem={{ nome: "", ordem: 0, cor: "#64748b", grupo: "Em andamento", ativo: true }}
+        renderForm={(f, set) => (<>
+          <Field label="Nome *"><input style={S.input} value={f.nome || ""} onChange={e => set("nome", e.target.value)} /></Field>
+          <Field label="Grupo">
+            <select style={S.select} value={f.grupo || ""} onChange={e => set("grupo", e.target.value)}>
+              <option value="">—</option>
+              {["Em andamento","Bloqueado","Concluído"].map(g => <option key={g}>{g}</option>)}
+            </select>
+          </Field>
+          <Field label="Ordem"><input type="number" style={S.input} value={f.ordem || 0} onChange={e => set("ordem", +e.target.value)} /></Field>
+          <Field label="Cor (hex)"><input style={S.input} value={f.cor || ""} onChange={e => set("cor", e.target.value)} placeholder="#3b82f6" /></Field>
+        </>)} />}
+
+      {tab === "dim_empresas" && <CRUDPage<any> title="Empresas de Faturamento" icon="🏦" endpoint="dim/empresas"
+        info="Dimensão SharePoint — indexar por: Nome (único), Cidade. Use como lookup em Contas a Receber (Faturado Por)."
+        columns={[
+          { key: "nome",   label: "Empresa", render: v => <strong>{v}</strong> },
+          { key: "cnpj",   label: "CNPJ" },
+          { key: "cidade", label: "Cidade" },
+          { key: "uf",     label: "UF" },
+          { key: "ativo",  label: "Ativo", render: v => v ? "✅" : "❌" },
+        ]}
+        emptyItem={{ nome: "", cnpj: "", cidade: "", uf: "RJ", ativo: true }}
+        renderForm={(f, set) => (<>
+          <Field label="Nome *"><input style={S.input} value={f.nome || ""} onChange={e => set("nome", e.target.value)} /></Field>
+          <Field label="CNPJ"><input style={S.input} value={f.cnpj || ""} onChange={e => set("cnpj", e.target.value)} /></Field>
+          <Field label="Cidade"><input style={S.input} value={f.cidade || ""} onChange={e => set("cidade", e.target.value)} /></Field>
+          <Field label="UF"><input style={S.input} maxLength={2} value={f.uf || ""} onChange={e => set("uf", e.target.value.toUpperCase())} /></Field>
+        </>)} />}
 
       {tab === "feriados" && <CRUDPage<Feriado> title="Feriados" icon="📅" endpoint="feriados"
         columns={[{ key: "data", label: "Data", render: v => fmt.date(v) }, { key: "nome", label: "Nome" }, { key: "tipo", label: "Tipo", render: v => <Badge text={v} /> }, { key: "estado", label: "Estado" }, { key: "municipio", label: "Município" }, { key: "pais", label: "País" }]}

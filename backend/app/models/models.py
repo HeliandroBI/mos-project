@@ -145,6 +145,80 @@ class ContaReceber(Base):
     def draft_codigo(self):
         return self.draft.codigo if self.draft else None
 
+# ── DIMENSÕES SHAREPOINT ──────────────────────────────────────────────────────
+
+class Cliente(Base):
+    """Dimensão: clientes — lookup para WOs e Contas a Receber."""
+    __tablename__ = "dim_clientes"
+    id         = Column(Integer, primary_key=True, index=True)
+    codigo     = Column(String(20), nullable=True, index=True)   # índice SP
+    nome       = Column(String(150), nullable=False, unique=True, index=True)
+    cnpj       = Column(String(20), nullable=True)
+    contato    = Column(String(150), nullable=True)
+    email      = Column(String(150), nullable=True)
+    pais       = Column(String(50), default="Brasil")
+    ativo      = Column(Boolean, default=True)
+    criado_em  = Column(DateTime(timezone=True), server_default=func.now())
+    atualizado_em = Column(DateTime(timezone=True), onupdate=func.now())
+
+class Plataforma(Base):
+    """Dimensão: plataformas/rigs — lookup para WOs e Contas a Receber."""
+    __tablename__ = "dim_plataformas"
+    id           = Column(Integer, primary_key=True, index=True)
+    nome         = Column(String(150), nullable=False, unique=True, index=True)
+    tipo         = Column(String(50), nullable=True)   # FPSO | Semisubmersível | Drillship | etc
+    cliente_id   = Column(Integer, ForeignKey("dim_clientes.id"), nullable=True, index=True)
+    bandeira     = Column(String(50), nullable=True)
+    ativo        = Column(Boolean, default=True)
+    criado_em    = Column(DateTime(timezone=True), server_default=func.now())
+    atualizado_em = Column(DateTime(timezone=True), onupdate=func.now())
+    cliente      = relationship("Cliente")
+
+class Coordenador(Base):
+    """Dimensão: coordenadores focais — lookup para WOs e Contas a Receber."""
+    __tablename__ = "dim_coordenadores"
+    id         = Column(Integer, primary_key=True, index=True)
+    nome       = Column(String(150), nullable=False, index=True)
+    sigla      = Column(String(10), nullable=True, unique=True, index=True)  # ex: AS, GR
+    email      = Column(String(150), nullable=True)
+    area       = Column(String(100), nullable=True)
+    ativo      = Column(Boolean, default=True)
+    criado_em  = Column(DateTime(timezone=True), server_default=func.now())
+    atualizado_em = Column(DateTime(timezone=True), onupdate=func.now())
+
+class TipoServicoD(Base):
+    """Dimensão: tipos de serviço — Choice delegável no SharePoint."""
+    __tablename__ = "dim_tipos_servico"
+    id         = Column(Integer, primary_key=True, index=True)
+    codigo     = Column(String(20), nullable=False, unique=True, index=True)  # SERVIÇO | LOCAÇÃO
+    descricao  = Column(String(150), nullable=True)
+    gera_iss   = Column(Boolean, default=True)
+    ativo      = Column(Boolean, default=True)
+    criado_em  = Column(DateTime(timezone=True), server_default=func.now())
+
+class StatusConta(Base):
+    """Dimensão: pipeline de status — Choice indexado no SharePoint."""
+    __tablename__ = "dim_status"
+    id         = Column(Integer, primary_key=True, index=True)
+    nome       = Column(String(100), nullable=False, unique=True, index=True)
+    ordem      = Column(Integer, default=0, index=True)
+    cor        = Column(String(20), nullable=True)   # hex p/ badge
+    grupo      = Column(String(50), nullable=True)   # Em andamento | Concluído | Bloqueado
+    ativo      = Column(Boolean, default=True)
+    criado_em  = Column(DateTime(timezone=True), server_default=func.now())
+
+class EmpresaFaturamento(Base):
+    """Dimensão: empresas que faturam (Rio, Macaé, etc.)."""
+    __tablename__ = "dim_empresas_faturamento"
+    id         = Column(Integer, primary_key=True, index=True)
+    nome       = Column(String(150), nullable=False, unique=True, index=True)
+    cnpj       = Column(String(20), nullable=True)
+    cidade     = Column(String(100), nullable=True, index=True)
+    uf         = Column(String(2), nullable=True)
+    ativo      = Column(Boolean, default=True)
+    criado_em  = Column(DateTime(timezone=True), server_default=func.now())
+    atualizado_em = Column(DateTime(timezone=True), onupdate=func.now())
+
 class AuditLog(Base):
     __tablename__ = "audit_log"
     id = Column(Integer, primary_key=True, index=True)
