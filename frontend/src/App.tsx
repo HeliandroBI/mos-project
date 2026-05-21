@@ -1044,7 +1044,10 @@ function ListaWOsPage({ spAccount, onLogin, onLogout }: {
         Para acessar a <strong>ListaWOs</strong> no SharePoint, faça login com sua conta Qualtech.<br />
         O TI deve ter aprovado as permissões para este app.
       </div>
-      <button style={btn("#0078d4")} onClick={onLogin}>🔑 Entrar com conta Qualtech</button>
+      <button style={btn("#0078d4")} onClick={async () => {
+        try { await onLogin(); }
+        catch(e: any) { alert("Erro ao autenticar: " + (e.message || String(e))); }
+      }}>🔑 Entrar com conta Qualtech</button>
     </div>
   );
 
@@ -1341,7 +1344,7 @@ export default function App() {
         </>)} />}
 
       {tab === "drafts" && <DraftsPage onDraftsChanged={reloadDrafts} />}
-      {tab === "sp_lista_wos" && <ListaWOsPage spAccount={spAccount} onLogin={async () => { const acc = await loginSharePoint(); setSpAccount(acc); }} onLogout={async () => { await logoutSharePoint(); setSpAccount(null); }} />}
+      {tab === "sp_lista_wos" && <ListaWOsPage spAccount={spAccount} onLogin={async () => { await initMsal(); const acc = await loginSharePoint(); setSpAccount(acc); }} onLogout={async () => { await logoutSharePoint(); setSpAccount(null); }} />}
 
       {/* ── DIMENSÕES SHAREPOINT ── */}
       {tab === "dim_clientes" && <CRUDPage<any> title="Clientes" icon="🏢" endpoint="dim/clientes"
