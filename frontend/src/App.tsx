@@ -1,6 +1,6 @@
 import Dashboard from "./Dashboard";
 import { useState, useEffect, useCallback } from "react";
-import { initMsal, getSpAccount, loginSharePoint, logoutSharePoint, postWOToSharePoint, getListItems } from "./services/sharepoint";
+import { initMsal, getSpAccount, loginSharePoint, logoutSharePoint, postWOToSharePoint, getListItems, listWOs, createWO, updateWO, deleteWO, type WOItem } from "./services/sharepoint";
 import { MOCK_CONTAS, MOCK_IMPOSTOS, MOCK_CLIENTES, MOCK_PROJETOS, MOCK_DRAFTS, MOCK_FERIADOS } from "./mockData";
 
 const DEMO = import.meta.env.VITE_DEMO === "true";
@@ -16,7 +16,8 @@ const MOCK_MAP: Record<string, any[]> = {
 };
 
 type Tab = "contas" | "dashboard" | "impostos" | "clientes" | "projetos" | "drafts" | "feriados"
-         | "dim_clientes" | "dim_plataformas" | "dim_coordenadores" | "dim_tipos_servico" | "dim_status" | "dim_empresas";
+         | "dim_clientes" | "dim_plataformas" | "dim_coordenadores" | "dim_tipos_servico" | "dim_status" | "dim_empresas"
+         | "sp_lista_wos";
 
 interface ContaReceber {
   id?: number; wo?: number; draft_id?: number; draft_codigo?: number; _novaDraft?: boolean;
@@ -981,6 +982,168 @@ function DraftsPage({ onDraftsChanged }: { onDraftsChanged?: () => void }) {
 }
 
 // ===== APP =====
+// ── ListaWOs SharePoint (CRUD live) ──────────────────────────────────────────
+function ListaWOsPage({ spAccount, onLogin, onLogout }: {
+  spAccount: { name?: string; username?: string } | null;
+  onLogin: () => Promise<void>;
+  onLogout: () => Promise<void>;
+}) {
+  const [items, setItems]     = useState<WOItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState<string | null>(null);
+  const [editing, setEditing] = useState<WOItem | null>(null);
+  const [form, setForm]       = useState<WOItem>({ WO: "", Client: "", Rig: "", Coordinator: "", ServiceType: "", Status: "" });
+  const [saving, setSaving]   = useState(false);
+  const [search, setSearch]   = useState("");
+
+  const load = async () => {
+    if (!spAccount) return;
+    setLoading(true); setError(null);
+    try {
+      const data = await listWOs();
+      setItems(data);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, [spAccount]);
+
+  const openNew  = () => { setForm({ WO: "", Client: "", Rig: "", Coordinator: "", ServiceType: "", Status: "" }); setEditing({} as WOItem); };
+  const openEdit = (row: WOItem) => { setForm({ ...row }); setEditing(row); };
+
+  const save = async () => {
+    setSaving(true); setError(null);
+    try {
+      if (form.ID) await updateWO(form.ID, form);
+      else         await createWO(form);
+      setEditing(null); await load();
+    } catch (e: any) { setError(e.message); }
+    finally { setSaving(false); }
+  };
+
+  const del = async (row: WOItem) => {
+    if (!row.ID) return;
+    if (!confirm(`Excluir WO ${row.WO} — ${row.Client}?`)) return;
+    setError(null);
+    try { await deleteWO(row.ID); await load(); }
+    catch (e: any) { setError(e.message); }
+  };
+
+  const filtered = items.filter(r =>
+    !search || [r.WO, r.Client, r.Rig, r.Coordinator, r.Status].some(v => String(v ?? "").toLowerCase().includes(search.toLowerCase()))
+  );
+
+  if (!spAccount) return (
+    <div style={{ ...S.page, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, minHeight: 300 }}>
+      <div style={{ fontSize: 48 }}>🔗</div>
+      <div style={{ fontWeight: 700, fontSize: 18, color: N.text }}>Conectar ao SharePoint</div>
+      <div style={{ color: N.muted, fontSize: 13, textAlign: "center", maxWidth: 400 }}>
+        Para acessar a <strong>ListaWOs</strong> no SharePoint, faça login com sua conta Qualtech.<br />
+        O TI deve ter aprovado as permissões para este app.
+      </div>
+      <button style={btn("#0078d4")} onClick={onLogin}>🔑 Entrar com conta Qualtech</button>
+    </div>
+  );
+
+  return (
+    <div style={S.page}>
+      {/* Header status conexão */}
+      <div style={{ background: "#ecfdf5", border: "1px solid #6ee7b7", borderRadius: 10, padding: "8px 14px", marginBottom: 10, fontSize: 12, color: "#065f46", display: "flex", alignItems: "center", gap: 8 }}>
+        <span>✅</span>
+        <span>Conectado como <strong>{spAccount.name}</strong> ({spAccount.username}) — Site: GLOBALAPPS · Lista: ListaWOs</span>
+        <button onClick={onLogout} style={{ marginLeft: "auto", background: "none", border: "1px solid #6ee7b7", borderRadius: 6, cursor: "pointer", fontSize: 11, color: "#065f46", padding: "2px 8px" }}>Sair</button>
+      </div>
+
+      {error && <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10, padding: "8px 14px", marginBottom: 10, fontSize: 12, color: "#991b1b" }}>⚠️ {error}</div>}
+
+      <div style={S.card}>
+        <div style={S.cardHeader}>
+          <span style={S.cardTitle}>🔗 ListaWOs · SharePoint {loading ? "⏳" : `(${filtered.length} itens)`}</span>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <input style={{ ...S.input, width: 160 }} placeholder="Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
+            <button style={btn("#6366f1")} onClick={load} disabled={loading}>↺ Recarregar</button>
+            <button style={btn("#059669")} onClick={openNew}>➕ Novo WO</button>
+          </div>
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table style={S.table}>
+            <thead><tr>
+              <th style={{ ...S.th, width: 80 }}>Ações</th>
+              <th style={S.th}>WO</th>
+              <th style={S.th}>Cliente</th>
+              <th style={S.th}>Rig / Plataforma</th>
+              <th style={S.th}>Coordenador</th>
+              <th style={S.th}>Tipo Serviço</th>
+              <th style={S.th}>Status SP</th>
+              <th style={{ ...S.th, color: N.muted }}>ID SP</th>
+            </tr></thead>
+            <tbody>
+              {filtered.length === 0 && !loading && (
+                <tr><td colSpan={8} style={{ ...S.td, textAlign: "center", color: "#94a3b8", padding: 32 }}>
+                  {items.length === 0 ? "Nenhum item na lista." : "Nenhum resultado para a busca."}
+                </td></tr>
+              )}
+              {filtered.map((row, i) => (
+                <tr key={row.ID ?? i} style={{ background: i % 2 === 0 ? N.card : N.bg }}>
+                  <td style={S.td}><div style={{ display: "flex", gap: 2 }}>
+                    <button style={btnSm(N.accent)} title="Editar" onClick={() => openEdit(row)}>✏️</button>
+                    <button style={btnSm("#dc2626")} title="Excluir" onClick={() => del(row)}>🗑</button>
+                  </div></td>
+                  <td style={{ ...S.td, fontWeight: 700 }}>{row.WO}</td>
+                  <td style={S.td}>{row.Client || "—"}</td>
+                  <td style={S.td}>{row.Rig || "—"}</td>
+                  <td style={S.td}>{row.Coordinator || "—"}</td>
+                  <td style={S.td}>{row.ServiceType ? <Badge text={row.ServiceType} /> : "—"}</td>
+                  <td style={S.td}>{row.Status ? <Badge text={row.Status} /> : "—"}</td>
+                  <td style={{ ...S.td, color: N.muted, fontSize: 11 }}>{row.ID}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Modal edição */}
+      {editing !== null && (
+        <div style={S.modal} onClick={e => { if (e.target === e.currentTarget) setEditing(null); }}>
+          <div style={{ ...S.modalBox, maxWidth: 520 }}>
+            <div style={{ ...S.cardHeader, background: "#0078d4", borderRadius: "12px 12px 0 0", padding: "14px 20px" }}>
+              <span style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>🔗 {form.ID ? `Editar WO ${form.WO}` : "Novo WO — ListaWOs"}</span>
+              <button onClick={() => setEditing(null)} style={{ background: "none", border: "none", color: "#fff", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
+            </div>
+            <div style={{ padding: 20, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <Field label="WO *"><input style={S.input} value={form.WO} onChange={e => setForm(f => ({ ...f, WO: e.target.value }))} placeholder="ex: 3808" /></Field>
+              <Field label="Cliente *"><input style={S.input} value={form.Client} onChange={e => setForm(f => ({ ...f, Client: e.target.value }))} placeholder="ex: Transocean" /></Field>
+              <Field label="Rig / Plataforma *"><input style={S.input} value={form.Rig} onChange={e => setForm(f => ({ ...f, Rig: e.target.value }))} placeholder="ex: Deepwater Corcovado" /></Field>
+              <Field label="Coordenador"><input style={S.input} value={form.Coordinator ?? ""} onChange={e => setForm(f => ({ ...f, Coordinator: e.target.value }))} placeholder="ex: GR" /></Field>
+              <Field label="Tipo de Serviço">
+                <select style={S.select} value={form.ServiceType ?? ""} onChange={e => setForm(f => ({ ...f, ServiceType: e.target.value }))}>
+                  <option value="">—</option>
+                  {["SERVIÇO","LOCAÇÃO","VENDA","CRÉDITO"].map(t => <option key={t}>{t}</option>)}
+                </select>
+              </Field>
+              <Field label="Status">
+                <select style={S.select} value={form.Status ?? ""} onChange={e => setForm(f => ({ ...f, Status: e.target.value }))}>
+                  <option value="">—</option>
+                  {["Em andamento","Concluído","Cancelado","Aguardando"].map(s => <option key={s}>{s}</option>)}
+                </select>
+              </Field>
+            </div>
+            {error && <div style={{ margin: "0 20px 12px", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "#991b1b" }}>⚠️ {error}</div>}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", padding: "0 20px 20px" }}>
+              <button style={btn("#64748b")} onClick={() => setEditing(null)}>Cancelar</button>
+              <button style={btn("#0078d4")} onClick={save} disabled={saving}>{saving ? "Salvando..." : "💾 Salvar no SharePoint"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [tab, setTab] = useState<Tab>("contas");
   const [drafts, setDrafts] = useState<Draft[]>([]);
@@ -1068,7 +1231,7 @@ export default function App() {
         {/* ⚙️ fora do nav — dropdown abre livremente para baixo/esquerda */}
         <div style={{ position: "relative", flexShrink: 0 }} onMouseDown={e => e.stopPropagation()}>
           <button
-            style={{ ...navBtn(["impostos","clientes","projetos","drafts","feriados","dim_clientes","dim_plataformas","dim_coordenadores","dim_tipos_servico","dim_status","dim_empresas"].includes(tab)),
+            style={{ ...navBtn(["impostos","clientes","projetos","drafts","feriados","dim_clientes","dim_plataformas","dim_coordenadores","dim_tipos_servico","dim_status","dim_empresas","sp_lista_wos"].includes(tab)),
               padding: "8px 14px", background: N.card,
               boxShadow: `4px 4px 10px ${N.shadowD}, -2px -2px 6px ${N.shadowL}`,
               borderRadius: 10, display: "flex", alignItems: "center", gap: 6 }}
@@ -1102,6 +1265,7 @@ export default function App() {
                 { key: "dim_tipos_servico"  as Tab, icon: "🔧",  label: "SP · Tipos Serviço" },
                 { key: "dim_status"         as Tab, icon: "🎨",  label: "SP · Status" },
                 { key: "dim_empresas"       as Tab, icon: "🏦",  label: "SP · Empresas Fat." },
+                { key: "sp_lista_wos"       as Tab, icon: "🔗",  label: "SP · ListaWOs (live)" },
               ].map((item, i, arr) => (
                 <button key={item.key}
                   onClick={() => { setTab(item.key); setSettingsOpen(false); }}
@@ -1176,6 +1340,7 @@ export default function App() {
         </>)} />}
 
       {tab === "drafts" && <DraftsPage onDraftsChanged={reloadDrafts} />}
+      {tab === "sp_lista_wos" && <ListaWOsPage spAccount={spAccount} onLogin={async () => { const acc = await loginSharePoint(); setSpAccount(acc); }} onLogout={async () => { await logoutSharePoint(); setSpAccount(null); }} />}
 
       {/* ── DIMENSÕES SHAREPOINT ── */}
       {tab === "dim_clientes" && <CRUDPage<any> title="Clientes" icon="🏢" endpoint="dim/clientes"
