@@ -79,9 +79,10 @@ export interface WOItem {
   WO: string;
   Client: string;
   Rig: string;
-  Coordinator?: string;
-  ServiceType?: string;
   Status?: string;
+  ContractType?: string;
+  Country?: string;
+  Contract_Category?: string;
 }
 
 export async function getListFields(): Promise<any[]> {
@@ -131,9 +132,10 @@ export async function createWO(data: Omit<WOItem, 'ID'>): Promise<WOItem> {
       WO: String(data.WO ?? ''),
       Client: data.Client ?? '',
       Rig: data.Rig ?? '',
-      Coordinator: data.Coordinator ?? '',
-      ServiceType: data.ServiceType ?? '',
       Status: data.Status ?? '',
+      ContractType: data.ContractType ?? '',
+      Country: data.Country ?? '',
+      Contract_Category: data.Contract_Category ?? '',
     }),
   });
   if (!response.ok) {
@@ -169,9 +171,10 @@ export async function updateWO(id: number, data: Omit<WOItem, 'ID'>): Promise<vo
       WO: String(data.WO ?? ''),
       Client: data.Client ?? '',
       Rig: data.Rig ?? '',
-      Coordinator: data.Coordinator ?? '',
-      ServiceType: data.ServiceType ?? '',
       Status: data.Status ?? '',
+      ContractType: data.ContractType ?? '',
+      Country: data.Country ?? '',
+      Contract_Category: data.Contract_Category ?? '',
     }),
   });
   if (!response.ok) {

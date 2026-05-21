@@ -992,7 +992,7 @@ function ListaWOsPage({ spAccount, onLogin, onLogout }: {
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState<string | null>(null);
   const [editing, setEditing] = useState<WOItem | null>(null);
-  const [form, setForm]       = useState<WOItem>({ WO: "", Client: "", Rig: "", Coordinator: "", ServiceType: "", Status: "" });
+  const [form, setForm]       = useState<WOItem>({ WO: "", Client: "", Rig: "", Status: "", ContractType: "", Country: "", Contract_Category: "" });
   const [saving, setSaving]   = useState(false);
   const [search, setSearch]   = useState("");
 
@@ -1011,7 +1011,7 @@ function ListaWOsPage({ spAccount, onLogin, onLogout }: {
 
   useEffect(() => { load(); }, [spAccount]);
 
-  const openNew  = () => { setForm({ WO: "", Client: "", Rig: "", Coordinator: "", ServiceType: "", Status: "" }); setEditing({} as WOItem); };
+  const openNew  = () => { setForm({ WO: "", Client: "", Rig: "", Status: "", ContractType: "", Country: "", Contract_Category: "" }); setEditing({} as WOItem); };
   const openEdit = (row: WOItem) => { setForm({ ...row }); setEditing(row); };
 
   const save = async () => {
@@ -1033,7 +1033,7 @@ function ListaWOsPage({ spAccount, onLogin, onLogout }: {
   };
 
   const filtered = items.filter(r =>
-    !search || [r.WO, r.Client, r.Rig, r.Coordinator, r.Status].some(v => String(v ?? "").toLowerCase().includes(search.toLowerCase()))
+    !search || [r.WO, r.Client, r.Rig, r.Status, r.ContractType, r.Country].some(v => String(v ?? "").toLowerCase().includes(search.toLowerCase()))
   );
 
   if (!spAccount) return (
@@ -1079,8 +1079,8 @@ function ListaWOsPage({ spAccount, onLogin, onLogout }: {
               <th style={S.th}>WO</th>
               <th style={S.th}>Cliente</th>
               <th style={S.th}>Rig / Plataforma</th>
-              <th style={S.th}>Coordenador</th>
-              <th style={S.th}>Tipo Serviço</th>
+              <th style={S.th}>Tipo Contrato</th>
+              <th style={S.th}>País</th>
               <th style={S.th}>Status SP</th>
               <th style={{ ...S.th, color: N.muted }}>ID SP</th>
             </tr></thead>
@@ -1099,8 +1099,8 @@ function ListaWOsPage({ spAccount, onLogin, onLogout }: {
                   <td style={{ ...S.td, fontWeight: 700 }}>{row.WO}</td>
                   <td style={S.td}>{row.Client || "—"}</td>
                   <td style={S.td}>{row.Rig || "—"}</td>
-                  <td style={S.td}>{row.Coordinator || "—"}</td>
-                  <td style={S.td}>{row.ServiceType ? <Badge text={row.ServiceType} /> : "—"}</td>
+                  <td style={S.td}>{row.ContractType ? <Badge text={row.ContractType} /> : "—"}</td>
+                  <td style={S.td}>{row.Country || "—"}</td>
                   <td style={S.td}>{row.Status ? <Badge text={row.Status} /> : "—"}</td>
                   <td style={{ ...S.td, color: N.muted, fontSize: 11 }}>{row.ID}</td>
                 </tr>
@@ -1122,13 +1122,9 @@ function ListaWOsPage({ spAccount, onLogin, onLogout }: {
               <Field label="WO *"><input style={S.input} value={form.WO} onChange={e => setForm(f => ({ ...f, WO: e.target.value }))} placeholder="ex: 3808" /></Field>
               <Field label="Cliente *"><input style={S.input} value={form.Client} onChange={e => setForm(f => ({ ...f, Client: e.target.value }))} placeholder="ex: Transocean" /></Field>
               <Field label="Rig / Plataforma *"><input style={S.input} value={form.Rig} onChange={e => setForm(f => ({ ...f, Rig: e.target.value }))} placeholder="ex: Deepwater Corcovado" /></Field>
-              <Field label="Coordenador"><input style={S.input} value={form.Coordinator ?? ""} onChange={e => setForm(f => ({ ...f, Coordinator: e.target.value }))} placeholder="ex: GR" /></Field>
-              <Field label="Tipo de Serviço">
-                <select style={S.select} value={form.ServiceType ?? ""} onChange={e => setForm(f => ({ ...f, ServiceType: e.target.value }))}>
-                  <option value="">—</option>
-                  {["SERVIÇO","LOCAÇÃO","VENDA","CRÉDITO"].map(t => <option key={t}>{t}</option>)}
-                </select>
-              </Field>
+              <Field label="Tipo Contrato (ContractType)"><input style={S.input} value={form.ContractType ?? ""} onChange={e => setForm(f => ({ ...f, ContractType: e.target.value }))} /></Field>
+              <Field label="País (Country)"><input style={S.input} value={form.Country ?? ""} onChange={e => setForm(f => ({ ...f, Country: e.target.value }))} /></Field>
+              <Field label="Categoria Contrato (Contract_Category)"><input style={S.input} value={form.Contract_Category ?? ""} onChange={e => setForm(f => ({ ...f, Contract_Category: e.target.value }))} /></Field>
               <Field label="Status">
                 <select style={S.select} value={form.Status ?? ""} onChange={e => setForm(f => ({ ...f, Status: e.target.value }))}>
                   <option value="">—</option>
