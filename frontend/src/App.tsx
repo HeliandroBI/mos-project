@@ -1344,7 +1344,7 @@ export default function App() {
         </>)} />}
 
       {tab === "drafts" && <DraftsPage onDraftsChanged={reloadDrafts} />}
-      {tab === "sp_lista_wos" && <ListaWOsPage spAccount={spAccount} onLogin={async () => { await initMsal(); const acc = await loginSharePoint(); setSpAccount(acc); }} onLogout={async () => { await logoutSharePoint(); setSpAccount(null); }} />}
+      {tab === "sp_lista_wos" && <ListaWOsPage spAccount={spAccount} onLogin={async () => { await loginSharePoint(); }} onLogout={async () => { await logoutSharePoint(); setSpAccount(null); }} />}
 
       {/* ── DIMENSÕES SHAREPOINT ── */}
       {tab === "dim_clientes" && <CRUDPage<any> title="Clientes" icon="🏢" endpoint="dim/clientes"

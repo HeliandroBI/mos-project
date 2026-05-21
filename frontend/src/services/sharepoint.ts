@@ -8,24 +8,29 @@ let initialized = false;
 export async function initMsal() {
   if (!initialized) {
     await msalInstance.initialize();
-    await msalInstance.handleRedirectPromise();
+    const result = await msalInstance.handleRedirectPromise();
+    // Se voltou de um loginRedirect, a conta já está disponível
+    if (result?.account) {
+      msalInstance.setActiveAccount(result.account);
+    }
     initialized = true;
   }
 }
 
 export function getSpAccount() {
-  return msalInstance.getAllAccounts()[0] ?? null;
+  return msalInstance.getActiveAccount() ?? msalInstance.getAllAccounts()[0] ?? null;
 }
 
 export async function loginSharePoint() {
   await initMsal();
-  const result = await msalInstance.loginPopup({ scopes: SP_SCOPES });
-  return result.account;
+  // Salva a aba ativa antes do redirect para restaurar ao voltar
+  sessionStorage.setItem("mos-tab", "sp_lista_wos");
+  await msalInstance.loginRedirect({ scopes: SP_SCOPES });
 }
 
 export async function logoutSharePoint() {
   const account = getSpAccount();
-  if (account) await msalInstance.logoutPopup({ account });
+  if (account) await msalInstance.logoutRedirect({ account });
 }
 
 async function getToken(): Promise<string> {
