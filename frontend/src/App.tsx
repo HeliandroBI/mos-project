@@ -1145,7 +1145,8 @@ function ListaWOsPage({ spAccount, onLogin, onLogout }: {
 }
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>("contas");
+  const [tab, setTab] = useState<Tab>(() => (sessionStorage.getItem("mos-tab") as Tab) || "contas");
+  const changeTab = (t: Tab) => { sessionStorage.setItem("mos-tab", t); setTab(t); };
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [projetos, setProjetos] = useState<Projeto[]>([]);
   const [dark, setDark] = useState(() => localStorage.getItem("mos-dark") === "1");
@@ -1174,7 +1175,7 @@ export default function App() {
   useEffect(() => {
     reloadDrafts();
     apiFetch.get("/projetos/").then(d => setProjetos(Array.isArray(d) ? d : [])).catch(() => {});
-    if (!DEMO) initMsal().then(() => setSpAccount(getSpAccount())).catch(() => {});
+    initMsal().then(() => setSpAccount(getSpAccount())).catch(() => {});
   }, []);
 
   const tabs: { key: Tab; label: string }[] = [
@@ -1205,8 +1206,8 @@ export default function App() {
 
         {/* Nav principal (flex:1, overflow auto interno) */}
         <div style={{ ...S.nav, flex: 1, margin: 0, justifyContent: "flex-start" }}>
-          <button style={navBtn(tab === "contas")} onClick={() => setTab("contas")}>📋 Contas a Receber</button>
-          <button style={navBtn(tab === "dashboard")} onClick={() => setTab("dashboard")}>📊 Dashboard</button>
+          <button style={navBtn(tab === "contas")} onClick={() => changeTab("contas")}>📋 Contas a Receber</button>
+          <button style={navBtn(tab === "dashboard")} onClick={() => changeTab("dashboard")}>📊 Dashboard</button>
 
           {tab === "dashboard" && (
             <>
@@ -1268,7 +1269,7 @@ export default function App() {
                 { key: "sp_lista_wos"       as Tab, icon: "🔗",  label: "SP · ListaWOs (live)" },
               ].map((item, i, arr) => (
                 <button key={item.key}
-                  onClick={() => { setTab(item.key); setSettingsOpen(false); }}
+                  onClick={() => { changeTab(item.key); setSettingsOpen(false); }}
                   style={{
                     padding: "11px 18px",
                     background: tab === item.key ? N.accent : "transparent",
