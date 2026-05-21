@@ -84,10 +84,22 @@ export interface WOItem {
   Status?: string;
 }
 
-export async function listWOs(): Promise<WOItem[]> {
+export async function getListFields(): Promise<any[]> {
   const token = await getToken();
   const response = await fetch(
-    `${SITE}/_api/web/lists/getbytitle('${LIST}')/items?$select=ID,WO,Client,Rig,Coordinator,ServiceType,Status&$top=5000&$orderby=WO desc`,
+    `${SITE}/_api/web/lists/getbytitle('${LIST}')/fields?$filter=Hidden eq false and ReadOnlyField eq false`,
+    { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json;odata=verbose' } }
+  );
+  if (!response.ok) throw new Error(`SharePoint FIELDS: ${response.status}`);
+  const result = await response.json();
+  return (result.d.results || []).map((f: any) => ({ title: f.Title, internalName: f.InternalName, type: f.TypeAsString }));
+}
+
+export async function listWOs(): Promise<WOItem[]> {
+  const token = await getToken();
+  // Busca todos os campos para descobrir o que existe na lista
+  const response = await fetch(
+    `${SITE}/_api/web/lists/getbytitle('${LIST}')/items?$select=*&$top=5000`,
     { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json;odata=verbose' } }
   );
   if (!response.ok) throw new Error(`SharePoint GET: ${response.status}`);

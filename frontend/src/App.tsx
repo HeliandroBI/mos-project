@@ -1,6 +1,6 @@
 import Dashboard from "./Dashboard";
 import { useState, useEffect, useCallback } from "react";
-import { initMsal, getSpAccount, loginSharePoint, logoutSharePoint, postWOToSharePoint, getListItems, listWOs, createWO, updateWO, deleteWO, type WOItem } from "./services/sharepoint";
+import { initMsal, getSpAccount, loginSharePoint, logoutSharePoint, postWOToSharePoint, getListItems, listWOs, createWO, updateWO, deleteWO, getListFields, type WOItem } from "./services/sharepoint";
 import { MOCK_CONTAS, MOCK_IMPOSTOS, MOCK_CLIENTES, MOCK_PROJETOS, MOCK_DRAFTS, MOCK_FERIADOS } from "./mockData";
 
 const DEMO = import.meta.env.VITE_DEMO === "true";
@@ -1068,6 +1068,7 @@ function ListaWOsPage({ spAccount, onLogin, onLogout }: {
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
             <input style={{ ...S.input, width: 160 }} placeholder="Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
             <button style={btn("#6366f1")} onClick={load} disabled={loading}>↺ Recarregar</button>
+            <button style={btn("#64748b")} onClick={async () => { try { const fields = await getListFields(); alert("Campos da lista:\n\n" + fields.map(f => `${f.internalName} (${f.title}) — ${f.type}`).join("\n")); } catch(e: any) { alert("Erro: " + e.message); } }}>🔍 Ver Campos SP</button>
             <button style={btn("#059669")} onClick={openNew}>➕ Novo WO</button>
           </div>
         </div>
