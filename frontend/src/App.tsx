@@ -1271,36 +1271,24 @@ function ProjectListPage({ spAccount, onLogin, onLogout }: {
                 </select>
               </Field>
               <Field label="Cliente (client_id)">
-                <SearchSelect
-                  options={clients.map((c: any) => ({ id: c.id, label: c.client_name ?? c.name ?? String(c.id) }))}
-                  value={form.client_id ?? null}
-                  onChange={id => setForm(f => ({ ...f, client_id: id ?? undefined }))}
-                  placeholder="Buscar cliente..."
-                />
+                {clients.length > 0
+                  ? <SearchSelect options={clients.map((c: any) => ({ id: c.id, label: c.client_name ?? c.name ?? String(c.id) }))} value={form.client_id ?? null} onChange={id => setForm(f => ({ ...f, client_id: id ?? undefined }))} placeholder="Buscar cliente..." />
+                  : <input type="number" style={S.input} value={form.client_id ?? ""} onChange={e => setForm(f => ({ ...f, client_id: e.target.value ? +e.target.value : undefined }))} placeholder="ID (backend offline)" />}
               </Field>
               <Field label="Plataforma / Rig (platform_id)">
-                <SearchSelect
-                  options={platforms.map((p: any) => ({ id: p.id, label: `${p.platform_name ?? p.name ?? String(p.id)}${p.platform_code ? ` (${p.platform_code})` : ""}` }))}
-                  value={form.platform_id ?? null}
-                  onChange={id => setForm(f => ({ ...f, platform_id: id ?? undefined }))}
-                  placeholder="Buscar plataforma..."
-                />
+                {platforms.length > 0
+                  ? <SearchSelect options={platforms.map((p: any) => ({ id: p.id, label: `${p.platform_name ?? p.name ?? String(p.id)}${p.platform_code ? ` (${p.platform_code})` : ""}` }))} value={form.platform_id ?? null} onChange={id => setForm(f => ({ ...f, platform_id: id ?? undefined }))} placeholder="Buscar plataforma..." />
+                  : <input type="number" style={S.input} value={form.platform_id ?? ""} onChange={e => setForm(f => ({ ...f, platform_id: e.target.value ? +e.target.value : undefined }))} placeholder="ID (backend offline)" />}
               </Field>
               <Field label="Contract Category">
-                <SearchSelect
-                  options={categories.map((c: any) => ({ id: c.id, label: c.contract_category_name ?? c.name ?? String(c.id) }))}
-                  value={form.contract_category ?? null}
-                  onChange={id => setForm(f => ({ ...f, contract_category: id ?? undefined }))}
-                  placeholder="Buscar categoria..."
-                />
+                {categories.length > 0
+                  ? <SearchSelect options={categories.map((c: any) => ({ id: c.id, label: c.contract_category_name ?? c.name ?? String(c.id) }))} value={form.contract_category ?? null} onChange={id => setForm(f => ({ ...f, contract_category: id ?? undefined }))} placeholder="Buscar categoria..." />
+                  : <input type="number" style={S.input} value={form.contract_category ?? ""} onChange={e => setForm(f => ({ ...f, contract_category: e.target.value ? +e.target.value : undefined }))} placeholder="ID (backend offline)" />}
               </Field>
               <Field label="Classification">
-                <SearchSelect
-                  options={classifications.map((c: any) => ({ id: c.id, label: c.project_classification_name ?? c.name ?? String(c.id) }))}
-                  value={form.project_classification ?? null}
-                  onChange={id => setForm(f => ({ ...f, project_classification: id ?? undefined }))}
-                  placeholder="Buscar classificação..."
-                />
+                {classifications.length > 0
+                  ? <SearchSelect options={classifications.map((c: any) => ({ id: c.id, label: c.project_classification_name ?? c.name ?? String(c.id) }))} value={form.project_classification ?? null} onChange={id => setForm(f => ({ ...f, project_classification: id ?? undefined }))} placeholder="Buscar classificação..." />
+                  : <input type="number" style={S.input} value={form.project_classification ?? ""} onChange={e => setForm(f => ({ ...f, project_classification: e.target.value ? +e.target.value : undefined }))} placeholder="ID (backend offline)" />}
               </Field>
             </div>
             <div style={{ padding: "0 20px 8px", fontSize: 11, color: N.muted }}>
