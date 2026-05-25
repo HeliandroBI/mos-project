@@ -113,6 +113,51 @@ const Field = ({ label, children }: { label: string; children: React.ReactNode }
   <div><label style={S.label}>{label}</label>{children}</div>
 );
 
+function SearchSelect({ options, value, onChange, placeholder }: {
+  options: { id: number; label: string }[];
+  value: number | null;
+  onChange: (id: number | null) => void;
+  placeholder?: string;
+}) {
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const selected = options.find(o => o.id === value);
+  const filtered = q ? options.filter(o => o.label.toLowerCase().includes(q.toLowerCase())) : options;
+  return (
+    <div style={{ position: "relative" }}>
+      <div style={{ display: "flex", gap: 4 }}>
+        <input
+          style={{ ...S.input, flex: 1 }}
+          placeholder={selected ? selected.label : (placeholder ?? "Selecionar...")}
+          value={open ? q : (selected ? selected.label : "")}
+          onFocus={() => { setOpen(true); setQ(""); }}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          onChange={e => setQ(e.target.value)}
+        />
+        {value !== null && (
+          <button type="button" style={{ background: "#f1f5f9", border: "1px solid #e2e8f0", borderRadius: 6, cursor: "pointer", padding: "0 8px", fontSize: 12, color: N.muted }}
+            onMouseDown={e => { e.preventDefault(); onChange(null); setQ(""); }}>✕</button>
+        )}
+      </div>
+      {open && filtered.length > 0 && (
+        <div style={{ position: "absolute", zIndex: 999, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,.12)", maxHeight: 200, overflowY: "auto", width: "100%", top: "calc(100% + 2px)" }}>
+          {filtered.slice(0, 50).map(o => (
+            <div key={o.id}
+              onMouseDown={e => { e.preventDefault(); onChange(o.id); setOpen(false); setQ(""); }}
+              style={{ padding: "7px 12px", cursor: "pointer", fontSize: 13, borderBottom: "1px solid #f1f5f9" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "#f8fafc")}
+              onMouseLeave={e => (e.currentTarget.style.background = "#fff")}
+            >
+              <span style={{ fontWeight: 600, color: N.accent }}>{o.id}</span>
+              <span style={{ color: N.text, marginLeft: 8 }}>{o.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Input de moeda: exibe R$ 1.234,56 quando desfocado, edita como "1234,56" quando focado */
 function CurrencyInput({ value, onChange, style, bold }: { value?: number; onChange: (v: number | undefined) => void; style?: React.CSSProperties; bold?: boolean }) {
   const [focused, setFocused] = useState(false);
@@ -991,6 +1036,10 @@ function ProjectListPage({ spAccount, onLogin, onLogout }: {
   const [view, setView]           = useState<"todos"|"brasil"|"internacional">("todos");
   const [spItems, setSpItems]     = useState<ProjectItem[]>([]);
   const [apiItems, setApiItems]   = useState<any[]>([]);
+  const [clients, setClients]     = useState<any[]>([]);
+  const [platforms, setPlatforms] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [classifications, setClassifications] = useState<any[]>([]);
   const [loading, setLoading]     = useState(false);
   const [syncing, setSyncing]     = useState<number[]>([]);
   const [error, setError]         = useState<string | null>(null);
@@ -998,6 +1047,8 @@ function ProjectListPage({ spAccount, onLogin, onLogout }: {
   const [form, setForm]           = useState<ProjectItem>({ project_number: 0, IDCountry: ID_COUNTRY_BR });
   const [saving, setSaving]       = useState(false);
   const [search, setSearch]       = useState("");
+
+  const BACKEND = "http://localhost:8000";
 
   const loadSP = async () => {
     if (!spAccount) return;
@@ -1009,9 +1060,19 @@ function ProjectListPage({ spAccount, onLogin, onLogout }: {
 
   const loadAPI = async () => {
     try {
-      const r = await fetch("http://localhost:8000/qualtech/api-projects");
-      if (r.ok) setApiItems(await r.json());
-    } catch { /* backend offline — ignora */ }
+      const [proj, cli, plat, cat, cls] = await Promise.all([
+        fetch(`${BACKEND}/qualtech/api-projects`).then(r => r.ok ? r.json() : []),
+        fetch(`${BACKEND}/qualtech/api-clients`).then(r => r.ok ? r.json() : []),
+        fetch(`${BACKEND}/qualtech/api-platforms`).then(r => r.ok ? r.json() : []),
+        fetch(`${BACKEND}/qualtech/api-contract-categories`).then(r => r.ok ? r.json() : []),
+        fetch(`${BACKEND}/qualtech/api-classifications`).then(r => r.ok ? r.json() : []),
+      ]);
+      setApiItems(proj);
+      setClients(cli);
+      setPlatforms(plat);
+      setCategories(cat);
+      setClassifications(cls);
+    } catch { /* backend offline */ }
   };
 
   useEffect(() => { loadSP(); loadAPI(); }, [spAccount]);
@@ -1104,8 +1165,8 @@ function ProjectListPage({ spAccount, onLogin, onLogout }: {
                   <thead><tr>
                     <th style={{ ...S.th, width: 100 }}>Ação</th>
                     <th style={S.th}>project_number</th>
-                    <th style={S.th}>client_id</th>
-                    <th style={S.th}>platform_id</th>
+                    <th style={S.th}>Cliente</th>
+                    <th style={S.th}>Plataforma</th>
                     <th style={S.th}>IDCountry</th>
                     <th style={S.th}>Status SP</th>
                   </tr></thead>
@@ -1114,6 +1175,8 @@ function ProjectListPage({ spAccount, onLogin, onLogout }: {
                       const pn = p.project_number ?? p.wo;
                       const noSP = !spBrasilNums.has(pn);
                       const isSyncing = syncing.includes(pn);
+                      const clientName = clients.find((c: any) => c.id === p.client_id)?.client_name ?? p.client_id ?? "—";
+                      const platName = platforms.find((pl: any) => pl.id === p.platform_id)?.platform_name ?? p.platform_id ?? "—";
                       return (
                         <tr key={pn} style={{ background: i % 2 === 0 ? N.card : N.bg }}>
                           <td style={S.td}>
@@ -1124,8 +1187,8 @@ function ProjectListPage({ spAccount, onLogin, onLogout }: {
                               : <span style={{ color: "#059669", fontSize: 11, fontWeight: 700 }}>✅ No SP</span>}
                           </td>
                           <td style={{ ...S.td, fontWeight: 700 }}>{pn}</td>
-                          <td style={S.td}>{p.client_id ?? "—"}</td>
-                          <td style={S.td}>{p.platform_id ?? "—"}</td>
+                          <td style={S.td}>{clientName}</td>
+                          <td style={S.td}>{platName}</td>
                           <td style={S.td}><Badge text={`${ID_COUNTRY_BR}`} color="#059669" /></td>
                           <td style={S.td}>{noSP ? <Badge text="Pendente" color="#f59e0b" /> : <Badge text="Sincronizado" color="#059669" />}</td>
                         </tr>
@@ -1152,19 +1215,23 @@ function ProjectListPage({ spAccount, onLogin, onLogout }: {
             <thead><tr>
               <th style={{ ...S.th, width: 80 }}>Ações</th>
               <th style={S.th}>IDWO</th>
-              <th style={S.th}>project_number</th>
-              <th style={S.th}>client_id</th>
-              <th style={S.th}>platform_id</th>
-              <th style={S.th}>contract_category</th>
-              <th style={S.th}>project_classification</th>
-              <th style={S.th}>IDCountry</th>
-              <th style={{ ...S.th, color: N.muted }}>ID SP</th>
+              <th style={S.th}>WO</th>
+              <th style={S.th}>Cliente</th>
+              <th style={S.th}>Plataforma</th>
+              <th style={S.th}>Categoria</th>
+              <th style={S.th}>Classificação</th>
+              <th style={S.th}>País</th>
             </tr></thead>
             <tbody>
               {filtered.length === 0 && !loading && (
-                <tr><td colSpan={9} style={{ ...S.td, textAlign: "center", color: "#94a3b8", padding: 32 }}>Nenhum item.</td></tr>
+                <tr><td colSpan={8} style={{ ...S.td, textAlign: "center", color: "#94a3b8", padding: 32 }}>Nenhum item.</td></tr>
               )}
-              {filtered.map((row, i) => (
+              {filtered.map((row, i) => {
+                const cliName = clients.find((c: any) => c.id === row.client_id)?.client_name ?? (row.client_id != null ? `ID ${row.client_id}` : "—");
+                const platName = platforms.find((p: any) => p.id === row.platform_id)?.platform_name ?? (row.platform_id != null ? `ID ${row.platform_id}` : "—");
+                const catName = categories.find((c: any) => c.id === row.contract_category)?.contract_category_name ?? (row.contract_category != null ? `ID ${row.contract_category}` : "—");
+                const clsName = classifications.find((c: any) => c.id === row.project_classification)?.project_classification_name ?? (row.project_classification != null ? `ID ${row.project_classification}` : "—");
+                return (
                 <tr key={row.ID ?? i} style={{ background: i % 2 === 0 ? N.card : N.bg }}>
                   <td style={S.td}><div style={{ display: "flex", gap: 2 }}>
                     <button style={btnSm(N.accent)} onClick={() => { setForm({...row}); setEditing(row); }}>✏️</button>
@@ -1172,14 +1239,14 @@ function ProjectListPage({ spAccount, onLogin, onLogout }: {
                   </div></td>
                   <td style={{ ...S.td, fontWeight: 700 }}>{row.IDWO ?? "—"}</td>
                   <td style={S.td}>{row.project_number}</td>
-                  <td style={S.td}>{row.client_id ?? "—"}</td>
-                  <td style={S.td}>{row.platform_id ?? "—"}</td>
-                  <td style={S.td}>{row.contract_category ?? "—"}</td>
-                  <td style={S.td}>{row.project_classification ?? "—"}</td>
+                  <td style={S.td}>{cliName}</td>
+                  <td style={S.td}>{platName}</td>
+                  <td style={S.td}>{catName}</td>
+                  <td style={S.td}>{clsName}</td>
                   <td style={S.td}><Badge text={String(row.IDCountry ?? "?")} color={row.IDCountry === ID_COUNTRY_BR ? "#059669" : "#6366f1"} /></td>
-                  <td style={{ ...S.td, color: N.muted, fontSize: 11 }}>{row.ID}</td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -1195,14 +1262,46 @@ function ProjectListPage({ spAccount, onLogin, onLogout }: {
             </div>
             <div style={{ padding: 20, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <Field label="project_number *"><input type="number" style={S.input} value={form.project_number || ""} onChange={e => setForm(f => ({ ...f, project_number: +e.target.value }))} /></Field>
-              <Field label="IDCountry *">
-                <input type="number" style={S.input} value={form.IDCountry ?? ""} onChange={e => setForm(f => ({ ...f, IDCountry: +e.target.value }))}
-                  placeholder={`Brasil = ${ID_COUNTRY_BR}`} />
+              <Field label="País (IDCountry) *">
+                <select style={S.input} value={form.IDCountry ?? ID_COUNTRY_BR} onChange={e => setForm(f => ({ ...f, IDCountry: +e.target.value }))}>
+                  <option value={10}>🇧🇷 Brasil (10)</option>
+                  <option value={20}>🌍 Internacional 20</option>
+                  <option value={30}>🌍 Internacional 30</option>
+                  <option value={40}>🌍 Internacional 40</option>
+                </select>
               </Field>
-              <Field label="client_id"><input type="number" style={S.input} value={form.client_id ?? ""} onChange={e => setForm(f => ({ ...f, client_id: e.target.value ? +e.target.value : undefined }))} /></Field>
-              <Field label="platform_id"><input type="number" style={S.input} value={form.platform_id ?? ""} onChange={e => setForm(f => ({ ...f, platform_id: e.target.value ? +e.target.value : undefined }))} /></Field>
-              <Field label="contract_category"><input type="number" style={S.input} value={form.contract_category ?? ""} onChange={e => setForm(f => ({ ...f, contract_category: e.target.value ? +e.target.value : undefined }))} /></Field>
-              <Field label="project_classification"><input type="number" style={S.input} value={form.project_classification ?? ""} onChange={e => setForm(f => ({ ...f, project_classification: e.target.value ? +e.target.value : undefined }))} /></Field>
+              <Field label="Cliente (client_id)">
+                <SearchSelect
+                  options={clients.map((c: any) => ({ id: c.id, label: c.client_name ?? c.name ?? String(c.id) }))}
+                  value={form.client_id ?? null}
+                  onChange={id => setForm(f => ({ ...f, client_id: id ?? undefined }))}
+                  placeholder="Buscar cliente..."
+                />
+              </Field>
+              <Field label="Plataforma / Rig (platform_id)">
+                <SearchSelect
+                  options={platforms.map((p: any) => ({ id: p.id, label: `${p.platform_name ?? p.name ?? String(p.id)}${p.platform_code ? ` (${p.platform_code})` : ""}` }))}
+                  value={form.platform_id ?? null}
+                  onChange={id => setForm(f => ({ ...f, platform_id: id ?? undefined }))}
+                  placeholder="Buscar plataforma..."
+                />
+              </Field>
+              <Field label="Contract Category">
+                <SearchSelect
+                  options={categories.map((c: any) => ({ id: c.id, label: c.contract_category_name ?? c.name ?? String(c.id) }))}
+                  value={form.contract_category ?? null}
+                  onChange={id => setForm(f => ({ ...f, contract_category: id ?? undefined }))}
+                  placeholder="Buscar categoria..."
+                />
+              </Field>
+              <Field label="Classification">
+                <SearchSelect
+                  options={classifications.map((c: any) => ({ id: c.id, label: c.project_classification_name ?? c.name ?? String(c.id) }))}
+                  value={form.project_classification ?? null}
+                  onChange={id => setForm(f => ({ ...f, project_classification: id ?? undefined }))}
+                  placeholder="Buscar classificação..."
+                />
+              </Field>
             </div>
             <div style={{ padding: "0 20px 8px", fontSize: 11, color: N.muted }}>
               IDWO será gerado automaticamente: <strong>{form.IDCountry}{form.project_number || "..."}</strong>

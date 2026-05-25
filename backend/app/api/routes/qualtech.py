@@ -122,3 +122,36 @@ async def list_api_users():
             headers={"Authorization": f"Bearer {token}"}
         )
     return r.json()
+
+
+@router.get("/api-clients")
+async def list_api_clients():
+    token = await get_qualtech_token()
+    async with httpx.AsyncClient() as client:
+        r = await client.get(
+            f"{API_BASE}/client/list",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+    return r.json()
+
+
+@router.get("/api-contract-categories")
+async def list_api_contract_categories():
+    token = await get_qualtech_token()
+    async with httpx.AsyncClient() as client:
+        r = await client.get(
+            f"{API_BASE}/contract_category/list",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+    return r.json()
+
+
+@router.get("/api-classifications")
+async def list_api_classifications():
+    token = await get_qualtech_token()
+    async with httpx.AsyncClient() as client:
+        r = await client.get(
+            f"{API_BASE}/project_classification/list",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+    return r.json()
