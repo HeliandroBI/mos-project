@@ -1,6 +1,6 @@
 import Dashboard from "./Dashboard";
 import { useState, useEffect, useCallback } from "react";
-import { initMsal, getSpAccount, loginSharePoint, logoutSharePoint, postWOToSharePoint, getListItems, listWOs, createWO, updateWO, deleteWO, getListFields, type WOItem } from "./services/sharepoint";
+import { initMsal, getSpAccount, loginSharePoint, logoutSharePoint, postWOToSharePoint, getListItems, listWOs, createWO, updateWO, deleteWO, getListFields, listProjects, createProject, updateProject, deleteProject, ID_COUNTRY_BR, type WOItem, type ProjectItem } from "./services/sharepoint";
 import { MOCK_CONTAS, MOCK_IMPOSTOS, MOCK_CLIENTES, MOCK_PROJETOS, MOCK_DRAFTS, MOCK_FERIADOS } from "./mockData";
 
 const DEMO = import.meta.env.VITE_DEMO === "true";
@@ -17,7 +17,7 @@ const MOCK_MAP: Record<string, any[]> = {
 
 type Tab = "contas" | "dashboard" | "impostos" | "clientes" | "projetos" | "drafts" | "feriados"
          | "dim_clientes" | "dim_plataformas" | "dim_coordenadores" | "dim_tipos_servico" | "dim_status" | "dim_empresas"
-         | "sp_lista_wos";
+         | "sp_lista_wos" | "sp_project_list";
 
 interface ContaReceber {
   id?: number; wo?: number; draft_id?: number; draft_codigo?: number; _novaDraft?: boolean;
@@ -982,6 +982,243 @@ function DraftsPage({ onDraftsChanged }: { onDraftsChanged?: () => void }) {
 }
 
 // ===== APP =====
+// ── project_list SharePoint (Brasil via API + Internacional manual) ──────────
+function ProjectListPage({ spAccount, onLogin, onLogout }: {
+  spAccount: { name?: string; username?: string } | null;
+  onLogin: () => Promise<void>;
+  onLogout: () => Promise<void>;
+}) {
+  const [view, setView]           = useState<"todos"|"brasil"|"internacional">("todos");
+  const [spItems, setSpItems]     = useState<ProjectItem[]>([]);
+  const [apiItems, setApiItems]   = useState<any[]>([]);
+  const [loading, setLoading]     = useState(false);
+  const [syncing, setSyncing]     = useState<number[]>([]);
+  const [error, setError]         = useState<string | null>(null);
+  const [editing, setEditing]     = useState<ProjectItem | null>(null);
+  const [form, setForm]           = useState<ProjectItem>({ project_number: 0, IDCountry: ID_COUNTRY_BR });
+  const [saving, setSaving]       = useState(false);
+  const [search, setSearch]       = useState("");
+
+  const loadSP = async () => {
+    if (!spAccount) return;
+    setLoading(true); setError(null);
+    try { setSpItems(await listProjects()); }
+    catch (e: any) { setError(e.message); }
+    finally { setLoading(false); }
+  };
+
+  const loadAPI = async () => {
+    try {
+      const r = await fetch("http://localhost:8000/qualtech/api-projects");
+      if (r.ok) setApiItems(await r.json());
+    } catch { /* backend offline — ignora */ }
+  };
+
+  useEffect(() => { loadSP(); loadAPI(); }, [spAccount]);
+
+  // WOs que já estão no SP (IDCountry=10 = Brasil)
+  const spBrasilNums = new Set(spItems.filter(i => i.IDCountry === ID_COUNTRY_BR).map(i => i.project_number));
+
+  const syncFromApi = async (proj: any) => {
+    const pn = proj.project_number ?? proj.wo;
+    setSyncing(s => [...s, pn]);
+    setError(null);
+    try {
+      await createProject({
+        project_number: pn,
+        client_id: proj.client_id,
+        platform_id: proj.platform_id,
+        contract_category: proj.contract_category,
+        IDCountry: ID_COUNTRY_BR,
+      });
+      await loadSP();
+    } catch (e: any) { setError(e.message); }
+    finally { setSyncing(s => s.filter(x => x !== pn)); }
+  };
+
+  const save = async () => {
+    setSaving(true); setError(null);
+    try {
+      if (form.ID) await updateProject(form.ID, form);
+      else         await createProject(form);
+      setEditing(null); await loadSP();
+    } catch (e: any) { setError(e.message); }
+    finally { setSaving(false); }
+  };
+
+  const del = async (row: ProjectItem) => {
+    if (!row.ID) return;
+    if (!confirm(`Excluir project_number ${row.project_number} (IDWO: ${row.IDWO})?`)) return;
+    try { await deleteProject(row.ID); await loadSP(); }
+    catch (e: any) { setError(e.message); }
+  };
+
+  const filtered = (view === "brasil"
+    ? spItems.filter(i => i.IDCountry === ID_COUNTRY_BR)
+    : view === "internacional"
+    ? spItems.filter(i => i.IDCountry !== ID_COUNTRY_BR)
+    : spItems
+  ).filter(r => !search || String(r.project_number).includes(search) || String(r.IDWO ?? "").includes(search));
+
+  if (!spAccount) return (
+    <div style={{ ...S.page, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, minHeight: 300 }}>
+      <div style={{ fontSize: 48 }}>🌍</div>
+      <div style={{ fontWeight: 700, fontSize: 18, color: N.text }}>Conectar ao SharePoint</div>
+      <div style={{ color: N.muted, fontSize: 13, textAlign: "center", maxWidth: 400 }}>
+        Para acessar a <strong>project_list</strong>, faça login com sua conta Qualtech.
+      </div>
+      <button style={btn("#0078d4")} onClick={async () => { try { await onLogin(); } catch(e:any) { alert("Erro: " + e.message); }}}>🔑 Entrar com conta Qualtech</button>
+    </div>
+  );
+
+  return (
+    <div style={S.page}>
+      {/* conexão */}
+      <div style={{ background: "#ecfdf5", border: "1px solid #6ee7b7", borderRadius: 10, padding: "8px 14px", marginBottom: 10, fontSize: 12, color: "#065f46", display: "flex", alignItems: "center", gap: 8 }}>
+        <span>✅</span>
+        <span>Conectado como <strong>{spAccount.name}</strong> — Lista: <strong>project_list</strong> · Brasil ID: <strong>{ID_COUNTRY_BR}</strong></span>
+        <button onClick={onLogout} style={{ marginLeft: "auto", background: "none", border: "1px solid #6ee7b7", borderRadius: 6, cursor: "pointer", fontSize: 11, color: "#065f46", padding: "2px 8px" }}>Sair</button>
+      </div>
+
+      {error && <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10, padding: "8px 14px", marginBottom: 10, fontSize: 12, color: "#991b1b" }}>⚠️ {error}</div>}
+
+      {/* abas */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+        {([["todos","📋","Todos",spItems.length],["brasil","🇧🇷","Brasil (API)",spItems.filter(i=>i.IDCountry===ID_COUNTRY_BR).length],["internacional","🌍","Internacional",spItems.filter(i=>i.IDCountry!==ID_COUNTRY_BR).length]] as const).map(([k,icon,label,count]) => (
+          <button key={k} onClick={() => setView(k as any)}
+            style={{ ...navBtn(view===k), fontSize: 12 }}>{icon} {label} ({count})</button>
+        ))}
+      </div>
+
+      {/* ── ABA BRASIL: sincronização da API ── */}
+      {view === "brasil" && (
+        <div style={{ ...S.card, marginBottom: 12 }}>
+          <div style={S.cardHeader}>
+            <span style={S.cardTitle}>🇧🇷 WOs da API Qualtech → project_list</span>
+            <button style={btn("#6366f1")} onClick={loadAPI}>↺ Atualizar API</button>
+          </div>
+          {apiItems.length === 0
+            ? <div style={{ padding: "16px 20px", color: N.muted, fontSize: 12 }}>Backend offline ou sem WOs na API.</div>
+            : <div style={{ overflowX: "auto" }}>
+                <table style={S.table}>
+                  <thead><tr>
+                    <th style={{ ...S.th, width: 100 }}>Ação</th>
+                    <th style={S.th}>project_number</th>
+                    <th style={S.th}>client_id</th>
+                    <th style={S.th}>platform_id</th>
+                    <th style={S.th}>IDCountry</th>
+                    <th style={S.th}>Status SP</th>
+                  </tr></thead>
+                  <tbody>
+                    {apiItems.map((p, i) => {
+                      const pn = p.project_number ?? p.wo;
+                      const noSP = !spBrasilNums.has(pn);
+                      const isSyncing = syncing.includes(pn);
+                      return (
+                        <tr key={pn} style={{ background: i % 2 === 0 ? N.card : N.bg }}>
+                          <td style={S.td}>
+                            {noSP
+                              ? <button style={btn("#059669")} onClick={() => syncFromApi(p)} disabled={isSyncing}>
+                                  {isSyncing ? "⏳" : "⬆ Sincronizar"}
+                                </button>
+                              : <span style={{ color: "#059669", fontSize: 11, fontWeight: 700 }}>✅ No SP</span>}
+                          </td>
+                          <td style={{ ...S.td, fontWeight: 700 }}>{pn}</td>
+                          <td style={S.td}>{p.client_id ?? "—"}</td>
+                          <td style={S.td}>{p.platform_id ?? "—"}</td>
+                          <td style={S.td}><Badge text={`${ID_COUNTRY_BR}`} color="#059669" /></td>
+                          <td style={S.td}>{noSP ? <Badge text="Pendente" color="#f59e0b" /> : <Badge text="Sincronizado" color="#059669" />}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>}
+        </div>
+      )}
+
+      {/* ── TABELA SP ── */}
+      <div style={S.card}>
+        <div style={S.cardHeader}>
+          <span style={S.cardTitle}>🌍 project_list · SharePoint {loading ? "⏳" : `(${filtered.length})`}</span>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <input style={{ ...S.input, width: 140 }} placeholder="Buscar WO..." value={search} onChange={e => setSearch(e.target.value)} />
+            <button style={btn("#6366f1")} onClick={loadSP} disabled={loading}>↺ Recarregar</button>
+            {view !== "brasil" && <button style={btn("#059669")} onClick={() => { setForm({ project_number: 0, IDCountry: view === "internacional" ? 40 : ID_COUNTRY_BR }); setEditing({} as ProjectItem); }}>➕ Novo</button>}
+          </div>
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table style={S.table}>
+            <thead><tr>
+              <th style={{ ...S.th, width: 80 }}>Ações</th>
+              <th style={S.th}>IDWO</th>
+              <th style={S.th}>project_number</th>
+              <th style={S.th}>client_id</th>
+              <th style={S.th}>platform_id</th>
+              <th style={S.th}>contract_category</th>
+              <th style={S.th}>project_classification</th>
+              <th style={S.th}>IDCountry</th>
+              <th style={{ ...S.th, color: N.muted }}>ID SP</th>
+            </tr></thead>
+            <tbody>
+              {filtered.length === 0 && !loading && (
+                <tr><td colSpan={9} style={{ ...S.td, textAlign: "center", color: "#94a3b8", padding: 32 }}>Nenhum item.</td></tr>
+              )}
+              {filtered.map((row, i) => (
+                <tr key={row.ID ?? i} style={{ background: i % 2 === 0 ? N.card : N.bg }}>
+                  <td style={S.td}><div style={{ display: "flex", gap: 2 }}>
+                    <button style={btnSm(N.accent)} onClick={() => { setForm({...row}); setEditing(row); }}>✏️</button>
+                    <button style={btnSm("#dc2626")} onClick={() => del(row)}>🗑</button>
+                  </div></td>
+                  <td style={{ ...S.td, fontWeight: 700 }}>{row.IDWO ?? "—"}</td>
+                  <td style={S.td}>{row.project_number}</td>
+                  <td style={S.td}>{row.client_id ?? "—"}</td>
+                  <td style={S.td}>{row.platform_id ?? "—"}</td>
+                  <td style={S.td}>{row.contract_category ?? "—"}</td>
+                  <td style={S.td}>{row.project_classification ?? "—"}</td>
+                  <td style={S.td}><Badge text={String(row.IDCountry ?? "?")} color={row.IDCountry === ID_COUNTRY_BR ? "#059669" : "#6366f1"} /></td>
+                  <td style={{ ...S.td, color: N.muted, fontSize: 11 }}>{row.ID}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Modal */}
+      {editing !== null && (
+        <div style={S.modal} onClick={e => { if (e.target === e.currentTarget) setEditing(null); }}>
+          <div style={{ ...S.modalBox, maxWidth: 520 }}>
+            <div style={{ ...S.cardHeader, background: "#6366f1", borderRadius: "12px 12px 0 0", padding: "14px 20px" }}>
+              <span style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>🌍 {form.ID ? `Editar IDWO ${form.IDWO}` : "Novo projeto"}</span>
+              <button onClick={() => setEditing(null)} style={{ background: "none", border: "none", color: "#fff", cursor: "pointer", fontSize: 18 }}>×</button>
+            </div>
+            <div style={{ padding: 20, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <Field label="project_number *"><input type="number" style={S.input} value={form.project_number || ""} onChange={e => setForm(f => ({ ...f, project_number: +e.target.value }))} /></Field>
+              <Field label="IDCountry *">
+                <input type="number" style={S.input} value={form.IDCountry ?? ""} onChange={e => setForm(f => ({ ...f, IDCountry: +e.target.value }))}
+                  placeholder={`Brasil = ${ID_COUNTRY_BR}`} />
+              </Field>
+              <Field label="client_id"><input type="number" style={S.input} value={form.client_id ?? ""} onChange={e => setForm(f => ({ ...f, client_id: e.target.value ? +e.target.value : undefined }))} /></Field>
+              <Field label="platform_id"><input type="number" style={S.input} value={form.platform_id ?? ""} onChange={e => setForm(f => ({ ...f, platform_id: e.target.value ? +e.target.value : undefined }))} /></Field>
+              <Field label="contract_category"><input type="number" style={S.input} value={form.contract_category ?? ""} onChange={e => setForm(f => ({ ...f, contract_category: e.target.value ? +e.target.value : undefined }))} /></Field>
+              <Field label="project_classification"><input type="number" style={S.input} value={form.project_classification ?? ""} onChange={e => setForm(f => ({ ...f, project_classification: e.target.value ? +e.target.value : undefined }))} /></Field>
+            </div>
+            <div style={{ padding: "0 20px 8px", fontSize: 11, color: N.muted }}>
+              IDWO será gerado automaticamente: <strong>{form.IDCountry}{form.project_number || "..."}</strong>
+            </div>
+            {error && <div style={{ margin: "0 20px 12px", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "#991b1b" }}>⚠️ {error}</div>}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", padding: "0 20px 20px" }}>
+              <button style={btn("#64748b")} onClick={() => setEditing(null)}>Cancelar</button>
+              <button style={btn("#6366f1")} onClick={save} disabled={saving}>{saving ? "Salvando..." : "💾 Salvar no SharePoint"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── ListaWOs SharePoint (CRUD live) ──────────────────────────────────────────
 function ListaWOsPage({ spAccount, onLogin, onLogout }: {
   spAccount: { name?: string; username?: string } | null;
@@ -1232,7 +1469,7 @@ export default function App() {
         {/* ⚙️ fora do nav — dropdown abre livremente para baixo/esquerda */}
         <div style={{ position: "relative", flexShrink: 0 }} onMouseDown={e => e.stopPropagation()}>
           <button
-            style={{ ...navBtn(["impostos","clientes","projetos","drafts","feriados","dim_clientes","dim_plataformas","dim_coordenadores","dim_tipos_servico","dim_status","dim_empresas","sp_lista_wos"].includes(tab)),
+            style={{ ...navBtn(["impostos","clientes","projetos","drafts","feriados","dim_clientes","dim_plataformas","dim_coordenadores","dim_tipos_servico","dim_status","dim_empresas","sp_lista_wos","sp_project_list"].includes(tab)),
               padding: "8px 14px", background: N.card,
               boxShadow: `4px 4px 10px ${N.shadowD}, -2px -2px 6px ${N.shadowL}`,
               borderRadius: 10, display: "flex", alignItems: "center", gap: 6 }}
@@ -1267,6 +1504,7 @@ export default function App() {
                 { key: "dim_status"         as Tab, icon: "🎨",  label: "SP · Status" },
                 { key: "dim_empresas"       as Tab, icon: "🏦",  label: "SP · Empresas Fat." },
                 { key: "sp_lista_wos"       as Tab, icon: "🔗",  label: "SP · ListaWOs (live)" },
+                { key: "sp_project_list"    as Tab, icon: "🌍",  label: "SP · project_list" },
               ].map((item, i, arr) => (
                 <button key={item.key}
                   onClick={() => { changeTab(item.key); setSettingsOpen(false); }}
@@ -1342,6 +1580,7 @@ export default function App() {
 
       {tab === "drafts" && <DraftsPage onDraftsChanged={reloadDrafts} />}
       {tab === "sp_lista_wos" && <ListaWOsPage spAccount={spAccount} onLogin={async () => { await loginSharePoint(); }} onLogout={async () => { await logoutSharePoint(); setSpAccount(null); }} />}
+      {tab === "sp_project_list" && <ProjectListPage spAccount={spAccount} onLogin={async () => { await loginSharePoint(); }} onLogout={async () => { await logoutSharePoint(); setSpAccount(null); }} />}
 
       {/* ── DIMENSÕES SHAREPOINT ── */}
       {tab === "dim_clientes" && <CRUDPage<any> title="Clientes" icon="🏢" endpoint="dim/clientes"

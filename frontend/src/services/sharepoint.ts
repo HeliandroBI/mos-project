@@ -214,3 +214,129 @@ export async function deleteWO(id: number): Promise<void> {
 export async function postWOToSharePoint(data: { wo?: number; cliente?: string; plataforma?: string }) {
   return createWO({ WO: String(data.wo ?? ''), Client: data.cliente ?? '', Rig: data.plataforma ?? '' });
 }
+
+// ── project_list CRUD ─────────────────────────────────────────────────────────
+
+const PROJ_LIST = 'project_list';
+const ID_COUNTRY_BRASIL = 10;
+
+export interface ProjectItem {
+  ID?: number;
+  IDWO?: string;           // IDCountry + project_number concatenado
+  project_number: number;
+  client_id?: number;
+  platform_id?: number;
+  contract_category?: number;
+  project_classification?: number;
+  IDCountry?: number;
+}
+
+async function getDigest(): Promise<string> {
+  const token = await getToken();
+  const r = await fetch(`${SITE}/_api/contextinfo`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json;odata=verbose' },
+  });
+  const json = await r.json();
+  return json.d.GetContextWebInformation.FormDigestValue;
+}
+
+export async function listProjects(): Promise<ProjectItem[]> {
+  const token = await getToken();
+  const response = await fetch(
+    `${SITE}/_api/web/lists/getbytitle('${PROJ_LIST}')/items?$select=ID,IDWO,project_number,client_id,platform_id,contract_category,project_classification,IDCountry&$top=5000&$orderby=IDCountry,project_number`,
+    { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json;odata=verbose' } }
+  );
+  if (!response.ok) throw new Error(`SharePoint GET project_list: ${response.status}`);
+  const result = await response.json();
+  return result.d.results || [];
+}
+
+export async function createProject(data: Omit<ProjectItem, 'ID'>): Promise<ProjectItem> {
+  const token = await getToken();
+  const digest = await getDigest();
+  // IDWO = IDCountry concatenado com project_number
+  const idCountry = data.IDCountry ?? ID_COUNTRY_BRASIL;
+  const idwo = String(idCountry) + String(data.project_number);
+
+  const response = await fetch(`${SITE}/_api/web/lists/getbytitle('${PROJ_LIST}')/items`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json;odata=verbose',
+      Accept: 'application/json;odata=verbose',
+      'X-RequestDigest': digest,
+    },
+    body: JSON.stringify({
+      __metadata: { type: 'SP.Data.Project_x005f_listListItem' },
+      IDWO: idwo,
+      project_number: data.project_number,
+      client_id: data.client_id ?? null,
+      platform_id: data.platform_id ?? null,
+      contract_category: data.contract_category ?? null,
+      project_classification: data.project_classification ?? null,
+      IDCountry: idCountry,
+    }),
+  });
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`SharePoint POST project_list: ${response.status} — ${err.slice(0, 300)}`);
+  }
+  clearCache(PROJ_LIST);
+  return (await response.json()).d;
+}
+
+export async function updateProject(id: number, data: Omit<ProjectItem, 'ID'>): Promise<void> {
+  const token = await getToken();
+  const digest = await getDigest();
+  const idCountry = data.IDCountry ?? ID_COUNTRY_BRASIL;
+  const idwo = String(idCountry) + String(data.project_number);
+
+  const response = await fetch(`${SITE}/_api/web/lists/getbytitle('${PROJ_LIST}')/items(${id})`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json;odata=verbose',
+      Accept: 'application/json;odata=verbose',
+      'X-RequestDigest': digest,
+      'X-HTTP-Method': 'MERGE',
+      'If-Match': '*',
+    },
+    body: JSON.stringify({
+      __metadata: { type: 'SP.Data.Project_x005f_listListItem' },
+      IDWO: idwo,
+      project_number: data.project_number,
+      client_id: data.client_id ?? null,
+      platform_id: data.platform_id ?? null,
+      contract_category: data.contract_category ?? null,
+      project_classification: data.project_classification ?? null,
+      IDCountry: idCountry,
+    }),
+  });
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`SharePoint UPDATE project_list: ${response.status} — ${err.slice(0, 300)}`);
+  }
+  clearCache(PROJ_LIST);
+}
+
+export async function deleteProject(id: number): Promise<void> {
+  const token = await getToken();
+  const digest = await getDigest();
+  const response = await fetch(`${SITE}/_api/web/lists/getbytitle('${PROJ_LIST}')/items(${id})`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'X-RequestDigest': digest,
+      'X-HTTP-Method': 'DELETE',
+      'If-Match': '*',
+    },
+  });
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`SharePoint DELETE project_list: ${response.status} — ${err.slice(0, 300)}`);
+  }
+  clearCache(PROJ_LIST);
+}
+
+export const ID_COUNTRY_BR = ID_COUNTRY_BRASIL;
