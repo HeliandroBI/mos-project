@@ -763,17 +763,20 @@ export default function Dashboard({ dark = false, onToggleDark, page = "status",
   const [meta, setMeta] = useState<{ clientes: string[]; plataformas: string[] }>({ clientes: [], plataformas: [] });
 
   const load = useCallback(() => {
-    setLoading(true);
-    getListItems("fContasReceber")
-      .then((items: Conta[]) => {
-        setAll(items);
-        setMeta({
-          clientes: [...new Set(items.map(x => x.cliente).filter(Boolean) as string[])].sort(),
-          plataformas: [...new Set(items.map(x => x.plataforma).filter(Boolean) as string[])].sort(),
-        });
-        setLoading(false);
-      })
-      .catch(e => { setError(String(e)); setLoading(false); });
+    import("./services/sharepoint").then(({ getSpAccount }) => {
+      if (!getSpAccount()) { setLoading(false); return; }
+      setLoading(true);
+      getListItems("fContasReceber")
+        .then((items: Conta[]) => {
+          setAll(items);
+          setMeta({
+            clientes: [...new Set(items.map(x => x.cliente).filter(Boolean) as string[])].sort(),
+            plataformas: [...new Set(items.map(x => x.plataforma).filter(Boolean) as string[])].sort(),
+          });
+          setLoading(false);
+        })
+        .catch(e => { setError(String(e)); setLoading(false); });
+    });
   }, []);
 
   useEffect(() => { load(); }, [load]);

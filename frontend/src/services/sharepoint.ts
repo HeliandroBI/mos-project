@@ -3,18 +3,19 @@ import { msalInstance, SP_SCOPES } from '../auth/msalConfig';
 const SITE = 'https://qualitechirmcom.sharepoint.com/sites/GLOBALAPPS';
 const LIST = 'ListaWOs';
 
-let initialized = false;
+let initPromise: Promise<void> | null = null;
 
-export async function initMsal() {
-  if (!initialized) {
-    await msalInstance.initialize();
-    const result = await msalInstance.handleRedirectPromise();
-    // Se voltou de um loginRedirect, a conta já está disponível
-    if (result?.account) {
-      msalInstance.setActiveAccount(result.account);
-    }
-    initialized = true;
+export function initMsal(): Promise<void> {
+  if (!initPromise) {
+    initPromise = (async () => {
+      await msalInstance.initialize();
+      const result = await msalInstance.handleRedirectPromise();
+      if (result?.account) {
+        msalInstance.setActiveAccount(result.account);
+      }
+    })();
   }
+  return initPromise;
 }
 
 export function getSpAccount() {
