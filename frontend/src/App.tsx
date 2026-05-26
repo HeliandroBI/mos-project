@@ -478,6 +478,7 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
   const [editing, setEditing] = useState<ContaReceber | null>(null);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [delTarget, setDelTarget] = useState<ContaReceber | null>(null);
   // edição inline: { id, field }
   const [inlineEdit, setInlineEdit] = useState<{ id: number; field: string } | null>(null);
@@ -527,7 +528,7 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
         total_bruto: filtered.reduce((s, x) => s + (x.vl_bruto || 0), 0),
         total_liquido: filtered.reduce((s, x) => s + (x.vl_liquido || 0), 0),
       });
-    } catch (e) { console.error(e); }
+    } catch (e: any) { console.error(e); setLoadError(String(e?.message || e)); }
     finally { setLoading(false); }
   }, [filters]);
 
@@ -558,6 +559,12 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
 
   return (
     <div style={S.page}>
+      {loadError && (
+        <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10, padding: "10px 16px", marginBottom: 12, fontSize: 12, color: "#991b1b" }}>
+          ⚠️ Erro ao carregar lista: <strong>{loadError}</strong>
+          <button onClick={() => { setLoadError(null); load(); }} style={{ marginLeft: 12, background: "#dc2626", border: "none", color: "#fff", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 11 }}>Tentar novamente</button>
+        </div>
+      )}
       {/* Stats */}
       <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
         {[["Total registros", total.total, "#0f172a"], ["Total Bruto", fmt.brl(total.total_bruto), "#0284c7"], ["Total Líquido", fmt.brl(total.total_liquido), "#059669"], ["Total Retido", fmt.brl(total.total_bruto - total.total_liquido), "#dc2626"]].map(([l, v, c]) => (
