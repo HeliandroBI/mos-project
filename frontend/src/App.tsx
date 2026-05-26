@@ -53,7 +53,15 @@ const apiFetch = {
 const fmt = {
   brl: (v?: number) => v != null ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v) : "-",
   pct: (v?: number) => v != null ? `${(v * 100).toFixed(2)}%` : "-",
-  date: (v?: string) => v ? new Date(v + "T00:00:00").toLocaleDateString("pt-BR") : "-",
+  date: (v?: string) => {
+    if (!v) return "-";
+    // SP OData verbose: /Date(1234567890000)/
+    const spMatch = String(v).match(/\/Date\((\d+)(?:[+-]\d+)?\)\//);
+    if (spMatch) return new Date(parseInt(spMatch[1])).toLocaleDateString("pt-BR");
+    // ISO date string (YYYY-MM-DD)
+    if (/^\d{4}-\d{2}-\d{2}/.test(v)) return new Date(v + "T12:00:00").toLocaleDateString("pt-BR");
+    return "-";
+  },
   num: (v?: number) => v != null ? v.toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : "",
 };
 

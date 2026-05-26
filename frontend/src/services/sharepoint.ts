@@ -64,8 +64,21 @@ export async function getListItems(listName: string): Promise<any[]> {
   if (!response.ok) throw new Error(`SharePoint GET: ${response.status}`);
   const result = await response.json();
   const items = result.d.results || [];
-  // Mapeia ID (maiúsculo do SP) → id (minúsculo da interface)
-  return items.map((item: any) => ({ ...item, id: item.ID }));
+  return items.map((item: any) => {
+    const out: any = { ...item, id: item.ID };
+    // Converte datas SP /Date(ms)/ → YYYY-MM-DD
+    for (const key of Object.keys(out)) {
+      const v = out[key];
+      if (typeof v === 'string') {
+        const m = v.match(/^\/Date\((\d+)(?:[+-]\d+)?\)\/$/);
+        if (m) {
+          const d = new Date(parseInt(m[1]));
+          out[key] = d.toISOString().slice(0, 10);
+        }
+      }
+    }
+    return out;
+  });
 }
 
 function clearCache(listName: string) {
