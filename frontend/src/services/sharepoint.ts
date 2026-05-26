@@ -47,18 +47,12 @@ async function getToken(): Promise<string> {
 }
 
 export async function getListItems(listName: string): Promise<any[]> {
-  // Se não está logado, dispara login antes de buscar
+  await initMsal(); // garante que MSAL está inicializado antes de qualquer operação
+
   let account = getSpAccount();
   if (!account) {
     await loginSharePoint();   // redireciona para login M365
     return [];                 // após redirect, página recarrega
-  }
-
-  const cacheKey = `sp-list-${listName}`;
-  const cached = sessionStorage.getItem(cacheKey);
-  if (cached) {
-    const { data, timestamp } = JSON.parse(cached);
-    if (Date.now() - timestamp < 5 * 60 * 1000) return data;
   }
 
   const token = await getToken();
@@ -68,9 +62,7 @@ export async function getListItems(listName: string): Promise<any[]> {
   );
   if (!response.ok) throw new Error(`SharePoint GET: ${response.status}`);
   const result = await response.json();
-  const items = result.d.results || [];
-  sessionStorage.setItem(cacheKey, JSON.stringify({ data: items, timestamp: Date.now() }));
-  return items;
+  return result.d.results || [];
 }
 
 function clearCache(listName: string) {
