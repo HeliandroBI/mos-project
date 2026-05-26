@@ -1,5 +1,5 @@
 import Dashboard from "./Dashboard";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { initMsal, getSpAccount, loginSharePoint, logoutSharePoint, postWOToSharePoint, getListItems, getToken, listWOs, createWO, updateWO, deleteWO, getListFields, listProjects, createProject, updateProject, deleteProject, createConta, updateConta, deleteConta, ID_COUNTRY_BR, type WOItem, type ProjectItem } from "./services/sharepoint";
 import { MOCK_CONTAS, MOCK_IMPOSTOS, MOCK_CLIENTES, MOCK_PROJETOS, MOCK_DRAFTS, MOCK_FERIADOS } from "./mockData";
 
@@ -495,6 +495,8 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
   const [dimStatus, setDimStatus] = useState<string[]>([]);
   const [dimEscopo, setDimEscopo] = useState<string[]>([]);
   const [dimFatPor, setDimFatPor] = useState<string[]>([]);
+  // Cache em memória — evita re-fetch ao filtrar
+  const allDataRef = useRef<ContaReceber[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [delTarget, setDelTarget] = useState<ContaReceber | null>(null);
   // edição inline: { id, field }
@@ -503,7 +505,7 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
   const quickSave = async (row: ContaReceber, field: string, value: string) => {
     setInlineEdit(null);
     if ((row as any)[field] === value) return;
-    try { await updateConta(row.id!, { [field]: value }); load(); }
+    try { await updateConta(row.id!, { [field]: value }); fetchData(); }
     catch (e: any) { alert(`Erro: ${e.message}`); }
   };
 
@@ -515,64 +517,67 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
     const { id, criado_em, atualizado_em, draft_codigo, _novaDraft, ...rest } = row as any;
     try {
       const res = await createConta(rest);
-      load();
+      fetchData();
       if (res?.ID) setEditing({ ...rest, id: res.ID });
     } catch (e: any) { alert(`Erro ao duplicar: ${e.message}`); }
   };
 
-  const load = useCallback(async () => {
+  // Aplica filtros sobre os dados em memória — sem requisição ao SP
+  const applyFilters = useCallback((data: ContaReceber[], f: any) => {
+    let r = data;
+    if (f.wo)            r = r.filter((x: any) => String(x.wo ?? '').includes(f.wo));
+    if (f.cliente_id)    r = r.filter((x: any) => Number(x.cliente_id) === Number(f.cliente_id));
+    if (f.plataforma_id) r = r.filter((x: any) => Number(x.plataforma_id) === Number(f.plataforma_id));
+    if (f.draft_codigo)  r = r.filter((x: any) => String(x.draft_codigo ?? '') === f.draft_codigo);
+    if (f.doc)           r = r.filter((x: any) => x.doc === f.doc);
+    if (f.num_doc)       r = r.filter((x: any) => String(x.num_doc ?? '').includes(f.num_doc));
+    if (f.status)        r = r.filter((x: any) => x.status === f.status);
+    if (f.escopo)        r = r.filter((x: any) => x.escopo === f.escopo);
+    if (f.faturado_por)  r = r.filter((x: any) => x.faturado_por === f.faturado_por);
+    if (f.data_doc)      r = r.filter((x: any) => (x.data_doc ?? '') === f.data_doc);
+    if (f.data_doc_de)   r = r.filter((x: any) => (x.data_doc ?? '') >= f.data_doc_de);
+    if (f.data_doc_ate)  r = r.filter((x: any) => (x.data_doc ?? '') <= f.data_doc_ate);
+    setItems(r);
+    setTotal({ total: r.length, total_bruto: r.reduce((s, x) => s + (x.vl_bruto || 0), 0), total_liquido: r.reduce((s, x) => s + (x.vl_liquido || 0), 0) });
+  }, []);
+
+  // Busca dados do SP — só chama quando realmente precisa recarregar
+  const fetchData = useCallback(async () => {
     if (!DEMO && !getSpAccount()) return;
     setLoading(true);
     try {
       const data: ContaReceber[] = DEMO ? MOCK_CONTAS : await getListItems('fContasReceber');
-
-      // Extrai dimensões únicas da lista (sem requisição extra ao SP)
-      const uniqBy = <T,>(arr: T[], key: (x: T) => any) => {
-        const seen = new Set(); return arr.filter(x => { const k = key(x); return seen.has(k) ? false : seen.add(k); });
-      };
-      const cliMap = uniqBy(data.filter((x: any) => x.cliente && x.cliente_id), (x: any) => x.cliente_id)
-        .map((x: any) => ({ id: Number(x.cliente_id), label: x.cliente })).sort((a,b) => a.label.localeCompare(b.label));
-      const platMap = uniqBy(data.filter((x: any) => x.plataforma && x.plataforma_id), (x: any) => x.plataforma_id)
-        .map((x: any) => ({ id: Number(x.plataforma_id), label: x.plataforma })).sort((a,b) => a.label.localeCompare(b.label));
-      setDimClientes(cliMap);
-      setDimPlataformas(platMap);
+      allDataRef.current = data;
+      // Popula dimensões uma única vez
+      const uniqBy = <T,>(arr: T[], key: (x: T) => any) => { const seen = new Set(); return arr.filter(x => { const k = key(x); return seen.has(k) ? false : seen.add(k); }); };
+      setDimClientes(uniqBy(data.filter((x: any) => x.cliente && x.cliente_id), (x: any) => x.cliente_id).map((x: any) => ({ id: Number(x.cliente_id), label: x.cliente })).sort((a,b) => a.label.localeCompare(b.label)));
+      setDimPlataformas(uniqBy(data.filter((x: any) => x.plataforma && x.plataforma_id), (x: any) => x.plataforma_id).map((x: any) => ({ id: Number(x.plataforma_id), label: x.plataforma })).sort((a,b) => a.label.localeCompare(b.label)));
       setDimStatus([...new Set(data.map((x: any) => x.status).filter(Boolean))].sort());
       setDimEscopo([...new Set(data.map((x: any) => x.escopo).filter(Boolean))].sort());
       setDimFatPor([...new Set(data.map((x: any) => x.faturado_por).filter(Boolean))].sort());
-
-      // Filtra por ID quando disponível, texto caso contrário
-      let filtered = data;
-      if (filters.wo)           filtered = filtered.filter((x: any) => String(x.wo ?? '').includes(filters.wo));
-      if (filters.cliente_id)   filtered = filtered.filter((x: any) => Number(x.cliente_id) === Number(filters.cliente_id));
-      if (filters.plataforma_id) filtered = filtered.filter((x: any) => Number(x.plataforma_id) === Number(filters.plataforma_id));
-      if (filters.draft_codigo) filtered = filtered.filter((x: any) => String(x.draft_codigo ?? '') === filters.draft_codigo);
-      if (filters.doc)          filtered = filtered.filter((x: any) => x.doc === filters.doc);
-      if (filters.num_doc)      filtered = filtered.filter((x: any) => String(x.num_doc ?? '').includes(filters.num_doc));
-      if (filters.status)       filtered = filtered.filter((x: any) => x.status === filters.status);
-      if (filters.escopo)       filtered = filtered.filter((x: any) => x.escopo === filters.escopo);
-      if (filters.faturado_por) filtered = filtered.filter((x: any) => x.faturado_por === filters.faturado_por);
-      if (filters.data_doc)     filtered = filtered.filter((x: any) => (x.data_doc ?? '') === filters.data_doc);
-      if (filters.data_doc_de)  filtered = filtered.filter((x: any) => (x.data_doc ?? '') >= filters.data_doc_de);
-      if (filters.data_doc_ate) filtered = filtered.filter((x: any) => (x.data_doc ?? '') <= filters.data_doc_ate);
-      setItems(filtered);
-      setTotal({
-        total: filtered.length,
-        total_bruto: filtered.reduce((s, x) => s + (x.vl_bruto || 0), 0),
-        total_liquido: filtered.reduce((s, x) => s + (x.vl_liquido || 0), 0),
-      });
+      applyFilters(data, filters);
     } catch (e: any) { console.error(e); setLoadError(String(e?.message || e)); }
     finally { setLoading(false); }
-  }, [filters]);
+  }, []); // sem dependências — nunca recria
 
-  // Re-executa quando login SP completa (spAccount muda de null para objeto)
-  useEffect(() => { load(); }, [load, spAccount]);
+  // Filtrar = instantâneo na memória, sem rede
+  const load = useCallback(() => {
+    if (allDataRef.current.length > 0) {
+      applyFilters(allDataRef.current, filters);
+    } else {
+      fetchData();
+    }
+  }, [filters, applyFilters, fetchData]);
+
+  // Busca inicial e quando login completa
+  useEffect(() => { fetchData(); }, [fetchData, spAccount]);
 
   const save = async (conta: ContaReceber) => {
     try {
       const { id, ...fields } = conta as any;
       if (id) await updateConta(id, fields);
       else await createConta(fields);
-      setEditing(null); load();
+      setEditing(null); fetchData();
     } catch (e: any) { alert(`Erro ao salvar: ${e.message || e}`); }
   };
 
@@ -581,7 +586,7 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
     try {
       await deleteConta(delTarget.id);
     } catch (e: any) { alert(`Erro ao excluir: ${e.message}`); }
-    setDelTarget(null); load();
+    setDelTarget(null); fetchData();
   };
 
   // Upload CSV removido — importação agora é direto no SharePoint
