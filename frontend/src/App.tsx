@@ -55,11 +55,14 @@ const fmt = {
   pct: (v?: number) => v != null ? `${(v * 100).toFixed(2)}%` : "-",
   date: (v?: string) => {
     if (!v) return "-";
-    // SP OData verbose: /Date(1234567890000)/
-    const spMatch = String(v).match(/\/Date\((\d+)(?:[+-]\d+)?\)\//);
-    if (spMatch) return new Date(parseInt(spMatch[1])).toLocaleDateString("pt-BR");
-    // ISO date string (YYYY-MM-DD)
-    if (/^\d{4}-\d{2}-\d{2}/.test(v)) return new Date(v + "T12:00:00").toLocaleDateString("pt-BR");
+    const s = String(v);
+    // SP OData verbose: /Date(1234567890000)/ ou /Date(1234567890000+0000)/
+    const spMs = s.match(/\/Date\((-?\d+)(?:[+-]\d+)?\)\//);
+    if (spMs) return new Date(parseInt(spMs[1])).toLocaleDateString("pt-BR");
+    // ISO com timezone: 2024-01-15T00:00:00Z ou 2024-01-15T00:00:00.000Z
+    if (s.includes("T")) return new Date(s).toLocaleDateString("pt-BR");
+    // Só data: 2024-01-15
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s + "T12:00:00").toLocaleDateString("pt-BR");
     return "-";
   },
   num: (v?: number) => v != null ? v.toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : "",

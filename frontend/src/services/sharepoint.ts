@@ -64,6 +64,7 @@ export async function getListItems(listName: string): Promise<any[]> {
   if (!response.ok) throw new Error(`SharePoint GET: ${response.status}`);
   const result = await response.json();
   const items = result.d.results || [];
+  if (items.length > 0) console.log('[SP] data_doc raw:', items[0].data_doc, '| vencimento raw:', items[0].vencimento);
   return items.map((item: any) => {
     const out: any = { ...item, id: item.ID };
     // SP usa Title como primeiro campo — mapeia para wo se wo estiver vazio
