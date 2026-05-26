@@ -486,6 +486,12 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
   const [editing, setEditing] = useState<ContaReceber | null>(null);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  // Dimensões extraídas da lista carregada (sem requisição extra)
+  const [dimClientes, setDimClientes] = useState<{id: number; label: string}[]>([]);
+  const [dimPlataformas, setDimPlataformas] = useState<{id: number; label: string}[]>([]);
+  const [dimStatus, setDimStatus] = useState<string[]>([]);
+  const [dimEscopo, setDimEscopo] = useState<string[]>([]);
+  const [dimFatPor, setDimFatPor] = useState<string[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [delTarget, setDelTarget] = useState<ContaReceber | null>(null);
   // edição inline: { id, field }
@@ -512,31 +518,45 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
   };
 
   const load = useCallback(async () => {
-    if (!DEMO && !getSpAccount()) return; // aguarda login via botão no header
+    if (!DEMO && !getSpAccount()) return;
     setLoading(true);
     try {
       const data: ContaReceber[] = DEMO ? MOCK_CONTAS : await getListItems('fContasReceber');
-      // Filtra localmente (SP retorna tudo, filtros são client-side)
+
+      // Extrai dimensões únicas da lista (sem requisição extra ao SP)
+      const uniqBy = <T,>(arr: T[], key: (x: T) => any) => {
+        const seen = new Set(); return arr.filter(x => { const k = key(x); return seen.has(k) ? false : seen.add(k); });
+      };
+      const cliMap = uniqBy(data.filter((x: any) => x.cliente && x.cliente_id), (x: any) => x.cliente_id)
+        .map((x: any) => ({ id: Number(x.cliente_id), label: x.cliente })).sort((a,b) => a.label.localeCompare(b.label));
+      const platMap = uniqBy(data.filter((x: any) => x.plataforma && x.plataforma_id), (x: any) => x.plataforma_id)
+        .map((x: any) => ({ id: Number(x.plataforma_id), label: x.plataforma })).sort((a,b) => a.label.localeCompare(b.label));
+      setDimClientes(cliMap);
+      setDimPlataformas(platMap);
+      setDimStatus([...new Set(data.map((x: any) => x.status).filter(Boolean))].sort());
+      setDimEscopo([...new Set(data.map((x: any) => x.escopo).filter(Boolean))].sort());
+      setDimFatPor([...new Set(data.map((x: any) => x.faturado_por).filter(Boolean))].sort());
+
+      // Filtra por ID quando disponível, texto caso contrário
       let filtered = data;
-      if (filters.wo)          filtered = filtered.filter(x => String(x.wo ?? '').includes(filters.wo));
-      if (filters.cliente)     filtered = filtered.filter(x => (x.cliente ?? '').toLowerCase().includes(filters.cliente.toLowerCase()));
-      if (filters.plataforma)  filtered = filtered.filter(x => (x.plataforma ?? '').toLowerCase().includes(filters.plataforma.toLowerCase()));
-      if (filters.draft_codigo) filtered = filtered.filter(x => String(x.draft_codigo ?? '') === filters.draft_codigo);
-      if (filters.doc)         filtered = filtered.filter(x => x.doc === filters.doc);
-      if (filters.num_doc)     filtered = filtered.filter(x => String(x.num_doc ?? '').includes(filters.num_doc));
-      if (filters.status)      filtered = filtered.filter(x => x.status === filters.status);
-      if (filters.escopo)      filtered = filtered.filter(x => x.escopo === filters.escopo);
-      if (filters.faturado_por) filtered = filtered.filter(x => (x.faturado_por ?? '').toLowerCase().includes(filters.faturado_por.toLowerCase()));
-      if (filters.data_doc)    filtered = filtered.filter(x => (x.data_doc ?? '') === filters.data_doc);
-      if (filters.data_doc_de) filtered = filtered.filter(x => (x.data_doc ?? '') >= filters.data_doc_de);
-      if (filters.data_doc_ate) filtered = filtered.filter(x => (x.data_doc ?? '') <= filters.data_doc_ate);
+      if (filters.wo)           filtered = filtered.filter((x: any) => String(x.wo ?? '').includes(filters.wo));
+      if (filters.cliente_id)   filtered = filtered.filter((x: any) => Number(x.cliente_id) === Number(filters.cliente_id));
+      if (filters.plataforma_id) filtered = filtered.filter((x: any) => Number(x.plataforma_id) === Number(filters.plataforma_id));
+      if (filters.draft_codigo) filtered = filtered.filter((x: any) => String(x.draft_codigo ?? '') === filters.draft_codigo);
+      if (filters.doc)          filtered = filtered.filter((x: any) => x.doc === filters.doc);
+      if (filters.num_doc)      filtered = filtered.filter((x: any) => String(x.num_doc ?? '').includes(filters.num_doc));
+      if (filters.status)       filtered = filtered.filter((x: any) => x.status === filters.status);
+      if (filters.escopo)       filtered = filtered.filter((x: any) => x.escopo === filters.escopo);
+      if (filters.faturado_por) filtered = filtered.filter((x: any) => x.faturado_por === filters.faturado_por);
+      if (filters.data_doc)     filtered = filtered.filter((x: any) => (x.data_doc ?? '') === filters.data_doc);
+      if (filters.data_doc_de)  filtered = filtered.filter((x: any) => (x.data_doc ?? '') >= filters.data_doc_de);
+      if (filters.data_doc_ate) filtered = filtered.filter((x: any) => (x.data_doc ?? '') <= filters.data_doc_ate);
       setItems(filtered);
       setTotal({
         total: filtered.length,
         total_bruto: filtered.reduce((s, x) => s + (x.vl_bruto || 0), 0),
         total_liquido: filtered.reduce((s, x) => s + (x.vl_liquido || 0), 0),
       });
-      if (data.length > 0) console.log('[SP fContasReceber] primeiro item:', data[0]);
     } catch (e: any) { console.error(e); setLoadError(String(e?.message || e)); }
     finally { setLoading(false); }
   }, [filters]);
@@ -584,10 +604,20 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
       {/* Filtros */}
       <div style={S.filters}>
         {/* WO */}
-        {[["WO", "wo", 75], ["Cliente", "cliente", 110], ["Plataforma", "plataforma", 110]].map(([lb, k, w]) => (
-          <div key={k as string}><label style={{ ...S.label, fontSize: 10, textTransform: "uppercase" as const }}>{lb}</label>
-            <input style={{ ...S.input, width: w as number }} value={filters[k] || ""} onChange={e => setFilters({ ...filters, [k as string]: e.target.value })} /></div>
-        ))}
+        <div><label style={{ ...S.label, fontSize: 10, textTransform: "uppercase" as const }}>WO</label>
+          <input style={{ ...S.input, width: 75 }} value={filters.wo || ""} onChange={e => setFilters({ ...filters, wo: e.target.value })} /></div>
+        {/* Cliente dropdown */}
+        <div><label style={{ ...S.label, fontSize: 10, textTransform: "uppercase" as const }}>Cliente</label>
+          <select style={{ ...S.select, width: 160 }} value={filters.cliente_id || ""} onChange={e => setFilters({ ...filters, cliente_id: e.target.value })}>
+            <option value="">Todos</option>
+            {dimClientes.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+          </select></div>
+        {/* Plataforma dropdown */}
+        <div><label style={{ ...S.label, fontSize: 10, textTransform: "uppercase" as const }}>Plataforma</label>
+          <select style={{ ...S.select, width: 160 }} value={filters.plataforma_id || ""} onChange={e => setFilters({ ...filters, plataforma_id: e.target.value })}>
+            <option value="">Todas</option>
+            {dimPlataformas.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+          </select></div>
         {/* Draft */}
         <div><label style={{ ...S.label, fontSize: 10, textTransform: "uppercase" as const }}>Draft</label>
           <input type="number" style={{ ...S.input, width: 80 }} value={filters.draft_codigo || ""} onChange={e => setFilters({ ...filters, draft_codigo: e.target.value })} /></div>
@@ -638,23 +668,23 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
         <div><label style={{ ...S.label, fontSize: 10, textTransform: "uppercase" as const }}>Escopo</label>
           <select style={{ ...S.select, width: 110 }} value={filters.escopo || ""} onChange={e => setFilters({ ...filters, escopo: e.target.value })}>
             <option value="">Todos</option>
-            {["SERVIÇO", "LOCAÇÃO", "VENDA", "CRÉDITO"].map(s => <option key={s}>{s}</option>)}
+            {dimEscopo.map(s => <option key={s}>{s}</option>)}
           </select></div>
         {/* Fat.Por */}
         <div><label style={{ ...S.label, fontSize: 10, textTransform: "uppercase" as const }}>Fat.Por</label>
-          <select style={{ ...S.select, width: 90 }} value={filters.faturado_por || ""} onChange={e => setFilters({ ...filters, faturado_por: e.target.value })}>
+          <select style={{ ...S.select, width: 110 }} value={filters.faturado_por || ""} onChange={e => setFilters({ ...filters, faturado_por: e.target.value })}>
             <option value="">Todos</option>
-            {["Rio", "Macaé"].map(s => <option key={s}>{s}</option>)}
+            {dimFatPor.map(s => <option key={s}>{s}</option>)}
           </select></div>
-        {/* Status - último */}
+        {/* Status */}
         <div><label style={{ ...S.label, fontSize: 10, textTransform: "uppercase" as const }}>Status</label>
-          <select style={{ ...S.select, width: 160 }} value={filters.status || ""} onChange={e => setFilters({ ...filters, status: e.target.value })}>
+          <select style={{ ...S.select, width: 180 }} value={filters.status || ""} onChange={e => setFilters({ ...filters, status: e.target.value })}>
             <option value="">Todos</option>
-            {["Gerência","Programado","a começar","em andamento","Confeccionar DI","Aguardando Resposta do Cliente","Aguardando Documentação","aguardando PO","Aguardando Inf. Interna","Aguardando Relatório","aguardando ajuste da PO","Devedores Incobráveis","Free Of Charge","Enviar NF","Aguardando Custo Log","Aguardando Liberação do Portal","AGUARDANDO PAGAMENTO","PAGO","Aguardando Aprovação Interna","Enviar DI ao Cliente","Aprovado em Data de Corte","Previsão","em negociação","finalizar","Aguardando Aprovação Gerencial","aguardando custo hospedagem"].map(s => <option key={s}>{s}</option>)}
+            {dimStatus.map(s => <option key={s}>{s}</option>)}
           </select></div>
         <div style={{ display: "flex", gap: 5, alignItems: "flex-end" }}>
           <button style={btn()} onClick={load}>🔍 Filtrar</button>
-          <button style={btn("#64748b")} onClick={() => setFilters({})}>✕ Limpar</button>
+          <button style={btn("#64748b")} onClick={() => { setFilters({}); }}>✕ Limpar</button>
         </div>
       </div>
 
