@@ -503,6 +503,7 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
   };
 
   const load = useCallback(async () => {
+    if (!DEMO && !getSpAccount()) return; // aguarda login
     setLoading(true);
     try {
       const data: ContaReceber[] = DEMO ? MOCK_CONTAS : await getListItems('fContasReceber');
@@ -530,7 +531,8 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
     finally { setLoading(false); }
   }, [filters]);
 
-  useEffect(() => { load(); }, [load]);
+  // Re-executa quando login SP completa (spAccount muda de null para objeto)
+  useEffect(() => { load(); }, [load, spAccount]);
 
   const save = async (conta: ContaReceber) => {
     try {
@@ -1471,7 +1473,11 @@ function ListaWOsPage({ spAccount, onLogin, onLogout }: {
 
 export default function App() {
   const [tab, setTab] = useState<Tab>(() => (sessionStorage.getItem("mos-tab") as Tab) || "contas");
-  const changeTab = (t: Tab) => { sessionStorage.setItem("mos-tab", t); setTab(t); };
+  const changeTab = (t: Tab) => {
+    sessionStorage.setItem("mos-tab", t);
+    sessionStorage.setItem("mos-active-tab", t); // preserva para restaurar após login redirect
+    setTab(t);
+  };
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [projetos, setProjetos] = useState<Projeto[]>([]);
   const [dark, setDark] = useState(() => localStorage.getItem("mos-dark") === "1");

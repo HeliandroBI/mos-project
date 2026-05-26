@@ -23,8 +23,9 @@ export function getSpAccount() {
 
 export async function loginSharePoint() {
   await initMsal();
-  // Salva a aba ativa antes do redirect para restaurar ao voltar
-  sessionStorage.setItem("mos-tab", "sp_lista_wos");
+  // Preserva a aba atual para restaurar após o redirect
+  const currentTab = sessionStorage.getItem("mos-active-tab") || "contas";
+  sessionStorage.setItem("mos-tab", currentTab);
   await msalInstance.loginRedirect({ scopes: SP_SCOPES });
 }
 
