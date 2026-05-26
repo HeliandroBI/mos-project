@@ -35,7 +35,7 @@ export async function logoutSharePoint() {
   if (account) await msalInstance.logoutRedirect({ account });
 }
 
-async function getToken(): Promise<string> {
+export async function getToken(): Promise<string> {
   const account = getSpAccount();
   if (!account) throw new Error('Não autenticado no SharePoint');
   try {
@@ -63,7 +63,9 @@ export async function getListItems(listName: string): Promise<any[]> {
   );
   if (!response.ok) throw new Error(`SharePoint GET: ${response.status}`);
   const result = await response.json();
-  return result.d.results || [];
+  const items = result.d.results || [];
+  // Mapeia ID (maiúsculo do SP) → id (minúsculo da interface)
+  return items.map((item: any) => ({ ...item, id: item.ID }));
 }
 
 function clearCache(listName: string) {

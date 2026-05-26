@@ -1,6 +1,6 @@
 import Dashboard from "./Dashboard";
 import { useState, useEffect, useCallback } from "react";
-import { initMsal, getSpAccount, loginSharePoint, logoutSharePoint, postWOToSharePoint, getListItems, listWOs, createWO, updateWO, deleteWO, getListFields, listProjects, createProject, updateProject, deleteProject, createConta, updateConta, deleteConta, ID_COUNTRY_BR, type WOItem, type ProjectItem } from "./services/sharepoint";
+import { initMsal, getSpAccount, loginSharePoint, logoutSharePoint, postWOToSharePoint, getListItems, getToken, listWOs, createWO, updateWO, deleteWO, getListFields, listProjects, createProject, updateProject, deleteProject, createConta, updateConta, deleteConta, ID_COUNTRY_BR, type WOItem, type ProjectItem } from "./services/sharepoint";
 import { MOCK_CONTAS, MOCK_IMPOSTOS, MOCK_CLIENTES, MOCK_PROJETOS, MOCK_DRAFTS, MOCK_FERIADOS } from "./mockData";
 
 const DEMO = import.meta.env.VITE_DEMO === "true";
@@ -528,6 +528,7 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
         total_bruto: filtered.reduce((s, x) => s + (x.vl_bruto || 0), 0),
         total_liquido: filtered.reduce((s, x) => s + (x.vl_liquido || 0), 0),
       });
+      if (data.length > 0) console.log('[SP fContasReceber] primeiro item:', data[0]);
     } catch (e: any) { console.error(e); setLoadError(String(e?.message || e)); }
     finally { setLoading(false); }
   }, [filters]);
@@ -661,6 +662,16 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
               alert(`Recálculo concluído: ${r.atualizados} registros atualizados.`);
               load();
             }}>⟳ Recalcular Tudo</button>
+            <button style={btn("#6366f1")} onClick={async () => {
+              try {
+                const token = await getToken();
+                const r = await fetch(`https://qualitechirmcom.sharepoint.com/sites/GLOBALAPPS/_api/web/lists/getbytitle('fContasReceber')/fields?$filter=Hidden eq false and ReadOnlyField eq false`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json;odata=verbose' } });
+                const json = await r.json();
+                const fields = (json.d.results || []).map((f: any) => `${f.InternalName} (${f.TypeAsString})`);
+                console.log('[SP fContasReceber] campos:', fields);
+                alert('Campos fContasReceber:\n\n' + fields.join('\n'));
+              } catch(e: any) { alert('Erro: ' + e.message); }
+            }}>🔍 Ver campos SP</button>
             <button style={btn("#6366f1")} onClick={() => window.open(`${API}/contas-receber/modelo-csv/download`)}>⬇ Modelo CSV</button>
             <label style={{ ...btn("#f59e0b"), cursor: "pointer" }}>📤 Importar CSV<input type="file" accept=".csv" style={{ display: "none" }} onChange={uploadCSV} /></label>
           </div>
