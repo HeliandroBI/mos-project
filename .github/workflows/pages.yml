@@ -32,7 +32,7 @@ jobs:
       - name: Build
         run: cd frontend && npm run build
         env:
-          VITE_DEMO: "true"
+          VITE_DEMO: "false"
           VITE_BASE_URL: "/mos-project/"
 
       - uses: actions/upload-pages-artifact@v3
