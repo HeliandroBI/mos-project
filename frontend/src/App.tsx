@@ -1,6 +1,6 @@
 import Dashboard from "./Dashboard";
 import { useState, useEffect, useCallback } from "react";
-import { initMsal, getSpAccount, loginSharePoint, logoutSharePoint, postWOToSharePoint, getListItems, listWOs, createWO, updateWO, deleteWO, getListFields, listProjects, createProject, updateProject, deleteProject, ID_COUNTRY_BR, type WOItem, type ProjectItem } from "./services/sharepoint";
+import { initMsal, getSpAccount, loginSharePoint, logoutSharePoint, postWOToSharePoint, getListItems, listWOs, createWO, updateWO, deleteWO, getListFields, listProjects, createProject, updateProject, deleteProject, createConta, updateConta, deleteConta, ID_COUNTRY_BR, type WOItem, type ProjectItem } from "./services/sharepoint";
 import { MOCK_CONTAS, MOCK_IMPOSTOS, MOCK_CLIENTES, MOCK_PROJETOS, MOCK_DRAFTS, MOCK_FERIADOS } from "./mockData";
 
 const DEMO = import.meta.env.VITE_DEMO === "true";
@@ -484,9 +484,9 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
 
   const quickSave = async (row: ContaReceber, field: string, value: string) => {
     setInlineEdit(null);
-    if ((row as any)[field] === value) return; // sem mudança
-    await apiFetch.put(`/contas-receber/${row.id}`, { ...row, [field]: value });
-    load();
+    if ((row as any)[field] === value) return;
+    try { await updateConta(row.id!, { [field]: value }); load(); }
+    catch (e: any) { alert(`Erro: ${e.message}`); }
   };
 
   const duplicate = async (row: ContaReceber) => {
@@ -494,34 +494,38 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
       `Duplicar este registro?\n\nWO ${row.wo} · ${row.cliente || ""} · ${row.plataforma || ""}\nDoc: ${row.doc || "-"} ${row.num_doc || ""} · ${row.escopo || ""}\n\nUm novo registro idêntico será criado. Você poderá editá-lo em seguida.`
     );
     if (!ok) return;
-    // Remove id e campos calculados para criar um registro novo limpo
     const { id, criado_em, atualizado_em, draft_codigo, _novaDraft, ...rest } = row as any;
-    const res = await apiFetch.post("/contas-receber/", rest);
-    if (res?.id) {
+    try {
+      const res = await createConta(rest);
       load();
-      setEditing(res); // abre o form do novo registro para edição imediata
-    }
+      if (res?.ID) setEditing({ ...rest, id: res.ID });
+    } catch (e: any) { alert(`Erro ao duplicar: ${e.message}`); }
   };
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      let data: any;
-      if (DEMO) {
-        data = MOCK_CONTAS;
-      } else {
-        const params = new URLSearchParams();
-        Object.entries(filters).forEach(([k, v]) => { if (v && !k.startsWith("_")) params.append(k, String(v)); });
-        params.append("limit", "500");
-        const r = await fetch(`${API}/contas-receber/?${params}`);
-        data = await r.json();
-      }
-      if (Array.isArray(data)) {
-        setItems(data);
-        setTotal({ total: data.length, total_bruto: data.reduce((s: number, x: ContaReceber) => s + (x.vl_bruto || 0), 0), total_liquido: data.reduce((s: number, x: ContaReceber) => s + (x.vl_liquido || 0), 0) });
-      } else if (data.items) {
-        setItems(data.items); setTotal({ total: data.total, total_bruto: data.total_bruto, total_liquido: data.total_liquido });
-      }
+      const data: ContaReceber[] = DEMO ? MOCK_CONTAS : await getListItems('fContasReceber');
+      // Filtra localmente (SP retorna tudo, filtros são client-side)
+      let filtered = data;
+      if (filters.wo)          filtered = filtered.filter(x => String(x.wo ?? '').includes(filters.wo));
+      if (filters.cliente)     filtered = filtered.filter(x => (x.cliente ?? '').toLowerCase().includes(filters.cliente.toLowerCase()));
+      if (filters.plataforma)  filtered = filtered.filter(x => (x.plataforma ?? '').toLowerCase().includes(filters.plataforma.toLowerCase()));
+      if (filters.draft_codigo) filtered = filtered.filter(x => String(x.draft_codigo ?? '') === filters.draft_codigo);
+      if (filters.doc)         filtered = filtered.filter(x => x.doc === filters.doc);
+      if (filters.num_doc)     filtered = filtered.filter(x => String(x.num_doc ?? '').includes(filters.num_doc));
+      if (filters.status)      filtered = filtered.filter(x => x.status === filters.status);
+      if (filters.escopo)      filtered = filtered.filter(x => x.escopo === filters.escopo);
+      if (filters.faturado_por) filtered = filtered.filter(x => (x.faturado_por ?? '').toLowerCase().includes(filters.faturado_por.toLowerCase()));
+      if (filters.data_doc)    filtered = filtered.filter(x => (x.data_doc ?? '') === filters.data_doc);
+      if (filters.data_doc_de) filtered = filtered.filter(x => (x.data_doc ?? '') >= filters.data_doc_de);
+      if (filters.data_doc_ate) filtered = filtered.filter(x => (x.data_doc ?? '') <= filters.data_doc_ate);
+      setItems(filtered);
+      setTotal({
+        total: filtered.length,
+        total_bruto: filtered.reduce((s, x) => s + (x.vl_bruto || 0), 0),
+        total_liquido: filtered.reduce((s, x) => s + (x.vl_liquido || 0), 0),
+      });
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }, [filters]);
@@ -530,27 +534,24 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
 
   const save = async (conta: ContaReceber) => {
     try {
-      let res: any;
-      if (conta.id) res = await apiFetch.put(`/contas-receber/${conta.id}`, conta);
-      else res = await apiFetch.post("/contas-receber/", conta);
-      if (res?.detail || res?.error) { alert(`Erro ao salvar: ${res.detail || res.error}`); return; }
+      const { id, ...fields } = conta as any;
+      if (id) await updateConta(id, fields);
+      else await createConta(fields);
       setEditing(null); load();
     } catch (e: any) { alert(`Erro ao salvar: ${e.message || e}`); }
   };
 
-  const del = async (responsavel: string, motivo: string) => {
+  const del = async (_responsavel: string, _motivo: string) => {
     if (!delTarget?.id) return;
-    const resumo = `WO ${delTarget.wo} | ${delTarget.cliente} | ${delTarget.plataforma} | ${delTarget.doc} | ${delTarget.status}`;
-    await logAndDelete("contas-receber", delTarget.id, resumo, responsavel, motivo);
+    try {
+      await deleteConta(delTarget.id);
+    } catch (e: any) { alert(`Erro ao excluir: ${e.message}`); }
     setDelTarget(null); load();
   };
 
-  const uploadCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]; if (!file) return;
-    const fd = new FormData(); fd.append("file", file);
-    const r = await fetch(`${API}/contas-receber/importar-csv`, { method: "POST", body: fd });
-    const res = await r.json();
-    alert(`Importados: ${res.importados}, Erros: ${res.erros}`); load();
+  // Upload CSV removido — importação agora é direto no SharePoint
+  const uploadCSV = async (_e: React.ChangeEvent<HTMLInputElement>) => {
+    alert('Importação via CSV foi migrada para o SharePoint.\nUse: Importar de > Excel na lista fContasReceber.');
   };
 
   return (

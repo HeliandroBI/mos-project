@@ -340,3 +340,68 @@ export async function deleteProject(id: number): Promise<void> {
 }
 
 export const ID_COUNTRY_BR = ID_COUNTRY_BRASIL;
+
+// ── fContasReceber CRUD ───────────────────────────────────────────────────────
+const CONTAS_LIST = 'fContasReceber';
+
+export async function createConta(data: Record<string, any>): Promise<any> {
+  const token = await getToken();
+  const digest = await getDigest();
+  const response = await fetch(`${SITE}/_api/web/lists/getbytitle('${CONTAS_LIST}')/items`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json;odata=nometadata',
+      Accept: 'application/json;odata=nometadata',
+      'X-RequestDigest': digest,
+    },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`SP create conta: ${response.status} — ${err.slice(0, 300)}`);
+  }
+  clearCache(CONTAS_LIST);
+  return response.json();
+}
+
+export async function updateConta(id: number, data: Record<string, any>): Promise<void> {
+  const token = await getToken();
+  const digest = await getDigest();
+  const response = await fetch(`${SITE}/_api/web/lists/getbytitle('${CONTAS_LIST}')/items(${id})`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json;odata=nometadata',
+      Accept: 'application/json;odata=nometadata',
+      'X-RequestDigest': digest,
+      'X-HTTP-Method': 'MERGE',
+      'If-Match': '*',
+    },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`SP update conta: ${response.status} — ${err.slice(0, 300)}`);
+  }
+  clearCache(CONTAS_LIST);
+}
+
+export async function deleteConta(id: number): Promise<void> {
+  const token = await getToken();
+  const digest = await getDigest();
+  const response = await fetch(`${SITE}/_api/web/lists/getbytitle('${CONTAS_LIST}')/items(${id})`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'X-RequestDigest': digest,
+      'X-HTTP-Method': 'DELETE',
+      'If-Match': '*',
+    },
+  });
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`SP delete conta: ${response.status} — ${err.slice(0, 300)}`);
+  }
+  clearCache(CONTAS_LIST);
+}

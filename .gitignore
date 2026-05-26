@@ -4,6 +4,8 @@ __pycache__/
 *.pyo
 backend/venv/
 .env
+.env.local
+.env.*.local
 
 # Build
 frontend/build/

@@ -3,6 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   Cell, PieChart, Pie, Legend, ReferenceLine
 } from "recharts";
+import { getListItems } from "./services/sharepoint";
 
 /* ── inject drill animation CSS once ── */
 (() => {
@@ -45,7 +46,7 @@ type Page = "status" | "faturar" | "doc" | "resposta" | "draft" | "mensal" | "cl
 type DrillState = { cliente?: string; plataforma?: string };
 
 /* ========== UTILS ========== */
-const API = (import.meta.env.VITE_API_URL || "http://localhost:8000") + "/api";
+// API removida — dados vêm direto do SharePoint via getListItems
 const fmtK = (v: number) => {
   if (v >= 1e6) return `R$${(v / 1e6).toFixed(1)}Mi`;
   if (v >= 1e3) return `R$${(v / 1e3).toFixed(0)}K`;
@@ -763,10 +764,8 @@ export default function Dashboard({ dark = false, onToggleDark, page = "status",
 
   const load = useCallback(() => {
     setLoading(true);
-    fetch(`${API}/contas-receber/?limit=2000`)
-      .then(r => r.json())
-      .then(d => {
-        const items: Conta[] = Array.isArray(d) ? d : (d.items ?? []);
+    getListItems("fContasReceber")
+      .then((items: Conta[]) => {
         setAll(items);
         setMeta({
           clientes: [...new Set(items.map(x => x.cliente).filter(Boolean) as string[])].sort(),
