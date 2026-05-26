@@ -503,7 +503,10 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
   };
 
   const load = useCallback(async () => {
-    if (!DEMO && !getSpAccount()) return; // aguarda login
+    if (!DEMO && !getSpAccount()) {
+      await loginSharePoint(); // dispara redirect para M365 se não logado
+      return;
+    }
     setLoading(true);
     try {
       const data: ContaReceber[] = DEMO ? MOCK_CONTAS : await getListItems('fContasReceber');
