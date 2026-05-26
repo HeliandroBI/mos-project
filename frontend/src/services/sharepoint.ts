@@ -46,8 +46,12 @@ async function getToken(): Promise<string> {
 }
 
 export async function getListItems(listName: string): Promise<any[]> {
-  const account = getSpAccount();
-  if (!account) return [];
+  // Se não está logado, dispara login antes de buscar
+  let account = getSpAccount();
+  if (!account) {
+    await loginSharePoint();   // redireciona para login M365
+    return [];                 // após redirect, página recarrega
+  }
 
   const cacheKey = `sp-list-${listName}`;
   const cached = sessionStorage.getItem(cacheKey);
