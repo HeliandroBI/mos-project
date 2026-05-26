@@ -503,10 +503,7 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
   };
 
   const load = useCallback(async () => {
-    if (!DEMO && !getSpAccount()) {
-      await loginSharePoint(); // dispara redirect para M365 se não logado
-      return;
-    }
+    if (!DEMO && !getSpAccount()) return; // aguarda login via botão no header
     setLoading(true);
     try {
       const data: ContaReceber[] = DEMO ? MOCK_CONTAS : await getListItems('fContasReceber');
@@ -671,7 +668,9 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
             <tbody>
               {items.length === 0 && !loading && (
                 <tr><td colSpan={20} style={{ ...S.td, textAlign: "center", color: "#94a3b8", padding: 40 }}>
-                  Nenhum registro. Clique em "➕ Novo" ou "📤 Importar CSV".
+                  {!DEMO && !spAccount
+                    ? <span>🔑 Clique em <strong>Entrar</strong> no topo da página para carregar os dados do SharePoint.</span>
+                    : 'Nenhum registro. Clique em "➕ Novo" ou "📤 Importar CSV".'}
                 </td></tr>
               )}
               {items.map((row, i) => {
@@ -1530,6 +1529,26 @@ export default function App() {
           <div style={{ fontSize: 11, color: T.muted }}>Offshore Workboard · Qualtech IRM</div>
         </div>
         <div style={{ flex: 1 }} />
+        {/* SP login/logout */}
+        {spAccount ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ textAlign: "right" as const }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: T.text }}>{spAccount.name}</div>
+              <div style={{ fontSize: 10, color: "#059669" }}>✅ SharePoint conectado</div>
+            </div>
+            <button onClick={async () => { await logoutSharePoint(); setSpAccount(null); }}
+              title="Sair do SharePoint"
+              style={{ background: "#fee2e2", border: "none", cursor: "pointer", fontSize: 12, padding: "6px 12px", borderRadius: 8, color: "#dc2626", fontWeight: 600 }}>
+              Sair
+            </button>
+          </div>
+        ) : (
+          <button onClick={async () => { try { await loginSharePoint(); } catch(e: any) { alert(e.message); } }}
+            title="Entrar com conta Qualtech"
+            style={{ background: "#0078d4", border: "none", cursor: "pointer", fontSize: 12, padding: "7px 14px", borderRadius: 8, color: "#fff", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
+            🔑 Entrar
+          </button>
+        )}
         <button onClick={toggleDark} title={dark ? "Modo claro" : "Modo escuro"}
           style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, padding: "4px 8px", borderRadius: 8, color: T.muted, transition: "color .2s" }}>
           {dark ? "☀️" : "🌙"}
