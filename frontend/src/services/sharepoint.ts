@@ -66,6 +66,10 @@ export async function getListItems(listName: string): Promise<any[]> {
   const items = result.d.results || [];
   return items.map((item: any) => {
     const out: any = { ...item, id: item.ID };
+    // SP usa Title como primeiro campo — mapeia para wo se wo estiver vazio
+    if (!out.wo && item.Title) out.wo = item.Title;
+    // draft_codigo pode vir como string "123" — converte para número
+    if (out.draft_codigo) out.draft_codigo = Number(out.draft_codigo) || out.draft_codigo;
     // Converte datas SP /Date(ms)/ → YYYY-MM-DD
     for (const key of Object.keys(out)) {
       const v = out[key];
