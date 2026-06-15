@@ -22,12 +22,17 @@ export function getSpAccount() {
   return msalInstance.getActiveAccount() ?? msalInstance.getAllAccounts()[0] ?? null;
 }
 
+let loginPromise: Promise<void> | null = null;
+
 export async function loginSharePoint() {
   await initMsal();
-  // Preserva a aba atual para restaurar após o redirect
-  const currentTab = sessionStorage.getItem("mos-active-tab") || "contas";
-  sessionStorage.setItem("mos-tab", currentTab);
-  await msalInstance.loginRedirect({ scopes: SP_SCOPES });
+  if (!loginPromise) {
+    // Preserva a aba atual para restaurar após o redirect
+    const currentTab = sessionStorage.getItem("mos-active-tab") || "contas";
+    sessionStorage.setItem("mos-tab", currentTab);
+    loginPromise = msalInstance.loginRedirect({ scopes: SP_SCOPES });
+  }
+  await loginPromise;
 }
 
 export async function logoutSharePoint() {
