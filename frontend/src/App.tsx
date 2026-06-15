@@ -1117,7 +1117,7 @@ function ProjectListPage({ spAccount, onLogin, onLogout }: {
   const [saving, setSaving]       = useState(false);
   const [search, setSearch]       = useState("");
 
-  const BACKEND = "http://localhost:8000";
+  const BACKEND = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
   const loadSP = async () => {
     if (!spAccount) return;
@@ -1130,11 +1130,11 @@ function ProjectListPage({ spAccount, onLogin, onLogout }: {
   const loadAPI = async () => {
     try {
       const [proj, cli, plat, cat, cls] = await Promise.all([
-        fetch(`${BACKEND}/qualtech/api-projects`).then(r => r.ok ? r.json() : []),
-        fetch(`${BACKEND}/qualtech/api-clients`).then(r => r.ok ? r.json() : []),
-        fetch(`${BACKEND}/qualtech/api-platforms`).then(r => r.ok ? r.json() : []),
-        fetch(`${BACKEND}/qualtech/api-contract-categories`).then(r => r.ok ? r.json() : []),
-        fetch(`${BACKEND}/qualtech/api-classifications`).then(r => r.ok ? r.json() : []),
+        fetch(`${BACKEND}/api/qualtech/api-projects`).then(r => r.ok ? r.json() : []),
+        fetch(`${BACKEND}/api/qualtech/api-clients`).then(r => r.ok ? r.json() : []),
+        fetch(`${BACKEND}/api/qualtech/api-platforms`).then(r => r.ok ? r.json() : []),
+        fetch(`${BACKEND}/api/qualtech/api-contract-categories`).then(r => r.ok ? r.json() : []),
+        fetch(`${BACKEND}/api/qualtech/api-classifications`).then(r => r.ok ? r.json() : []),
       ]);
       setApiItems(proj);
       setClients(cli);

@@ -5,6 +5,7 @@ from app.routers import (
     impostos, clientes_prazos, projetos, drafts,
     feriados, contas_receber
 )
+from app.api.routes import qualtech
 
 Base.metadata.create_all(bind=engine)
 
@@ -24,6 +25,7 @@ app.include_router(projetos.router,         prefix="/api/projetos",         tags
 app.include_router(drafts.router,           prefix="/api/drafts",           tags=["Drafts"])
 app.include_router(feriados.router,         prefix="/api/feriados",         tags=["Feriados"])
 app.include_router(contas_receber.router,   prefix="/api/contas-receber",   tags=["Contas a Receber"])
+app.include_router(qualtech.router,         prefix="/api/qualtech",          tags=["Qualtech API"])
 
 @app.get("/")
 def root():
