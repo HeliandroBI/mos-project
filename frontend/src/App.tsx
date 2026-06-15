@@ -127,7 +127,7 @@ const Field = ({ label, children }: { label: string; children: React.ReactNode }
 function SearchSelect({ options, value, onChange, placeholder }: {
   options: { id: number; label: string }[];
   value: number | null;
-  onChange: (id: number | null) => void;
+  onChange: (id: number | null, option?: { id: number; label: string } | null) => void;
   placeholder?: string;
 }) {
   const [q, setQ] = useState("");
@@ -154,7 +154,7 @@ function SearchSelect({ options, value, onChange, placeholder }: {
         <div style={{ position: "absolute", zIndex: 999, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,.12)", maxHeight: 200, overflowY: "auto", width: "100%", top: "calc(100% + 2px)" }}>
           {filtered.slice(0, 50).map(o => (
             <div key={o.id}
-              onMouseDown={e => { e.preventDefault(); onChange(o.id); setOpen(false); setQ(""); }}
+              onMouseDown={e => { e.preventDefault(); onChange(o.id, o); setOpen(false); setQ(""); }}
               style={{ padding: "7px 12px", cursor: "pointer", fontSize: 13, borderBottom: "1px solid #f1f5f9" }}
               onMouseEnter={e => (e.currentTarget.style.background = "#f8fafc")}
               onMouseLeave={e => (e.currentTarget.style.background = "#fff")}
@@ -1385,9 +1385,14 @@ function ListaWOsPage({ spAccount, onLogin, onLogout }: {
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState<string | null>(null);
   const [editing, setEditing] = useState<WOItem | null>(null);
-  const [form, setForm]       = useState<WOItem>({ WO: "", Client: "", Rig: "", Status: "", ContractType: "", Country: "", Contract_Category: "" });
+  const [form, setForm]       = useState<WOItem>({ WO: "", Client: "", Rig: "" });
   const [saving, setSaving]   = useState(false);
   const [search, setSearch]   = useState("");
+  const [clients, setClients]   = useState<any[]>([]);
+  const [platforms, setPlatforms] = useState<any[]>([]);
+  const [contractCategories, setContractCategories] = useState<any[]>([]);
+
+  const BACKEND = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
   const load = async () => {
     if (!spAccount) return;
@@ -1402,9 +1407,22 @@ function ListaWOsPage({ spAccount, onLogin, onLogout }: {
     }
   };
 
-  useEffect(() => { load(); }, [spAccount]);
+  const loadApiOptions = async () => {
+    try {
+      const [cli, plat, cat] = await Promise.all([
+        fetch(`${BACKEND}/api/qualtech/api-clients`).then(r => r.ok ? r.json() : []),
+        fetch(`${BACKEND}/api/qualtech/api-platforms`).then(r => r.ok ? r.json() : []),
+        fetch(`${BACKEND}/api/qualtech/api-contract-categories`).then(r => r.ok ? r.json() : []),
+      ]);
+      setClients(Array.isArray(cli) ? cli : []);
+      setPlatforms(Array.isArray(plat) ? plat : []);
+      setContractCategories(Array.isArray(cat) ? cat : []);
+    } catch { /* API Qualtech indisponível — segue com inputs manuais */ }
+  };
 
-  const openNew  = () => { setForm({ WO: "", Client: "", Rig: "", Status: "", ContractType: "", Country: "", Contract_Category: "" }); setEditing({} as WOItem); };
+  useEffect(() => { load(); loadApiOptions(); }, [spAccount]);
+
+  const openNew  = () => { setForm({ WO: "", Client: "", Rig: "" }); setEditing({} as WOItem); };
   const openEdit = (row: WOItem) => { setForm({ ...row }); setEditing(row); };
 
   const save = async () => {
@@ -1513,15 +1531,28 @@ function ListaWOsPage({ spAccount, onLogin, onLogout }: {
             </div>
             <div style={{ padding: 20, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <Field label="WO *"><input style={S.input} value={form.WO} onChange={e => setForm(f => ({ ...f, WO: e.target.value }))} placeholder="ex: 3808" /></Field>
-              <Field label="Cliente *"><input style={S.input} value={form.Client} onChange={e => setForm(f => ({ ...f, Client: e.target.value }))} placeholder="ex: Transocean" /></Field>
-              <Field label="Rig / Plataforma *"><input style={S.input} value={form.Rig} onChange={e => setForm(f => ({ ...f, Rig: e.target.value }))} placeholder="ex: Deepwater Corcovado" /></Field>
-              <Field label="Tipo Contrato (ContractType)"><input style={S.input} value={form.ContractType ?? ""} onChange={e => setForm(f => ({ ...f, ContractType: e.target.value }))} /></Field>
-              <Field label="País (Country)"><input style={S.input} value={form.Country ?? ""} onChange={e => setForm(f => ({ ...f, Country: e.target.value }))} /></Field>
-              <Field label="Categoria Contrato (Contract_Category)"><input style={S.input} value={form.Contract_Category ?? ""} onChange={e => setForm(f => ({ ...f, Contract_Category: e.target.value }))} /></Field>
-              <Field label="Status">
-                <select style={S.select} value={form.Status ?? ""} onChange={e => setForm(f => ({ ...f, Status: e.target.value }))}>
+              <Field label="Cliente *">
+                {clients.length > 0
+                  ? <SearchSelect options={clients.map((c: any) => ({ id: c.id, label: c.client_name ?? c.name ?? String(c.id) }))} value={form.client_id ?? null} onChange={(id, opt) => setForm(f => ({ ...f, client_id: id ?? undefined, Client: opt?.label ?? f.Client }))} placeholder="Buscar cliente..." />
+                  : <input style={S.input} value={form.Client} onChange={e => setForm(f => ({ ...f, Client: e.target.value }))} placeholder="ex: Transocean" />}
+              </Field>
+              <Field label="Rig / Plataforma *">
+                {platforms.length > 0
+                  ? <SearchSelect options={platforms.map((p: any) => ({ id: p.id, label: p.platform_name ?? p.name ?? String(p.id) }))} value={form.platform_id ?? null} onChange={(id, opt) => setForm(f => ({ ...f, platform_id: id ?? undefined, Rig: opt?.label ?? f.Rig }))} placeholder="Buscar plataforma..." />
+                  : <input style={S.input} value={form.Rig} onChange={e => setForm(f => ({ ...f, Rig: e.target.value }))} placeholder="ex: Deepwater Corcovado" />}
+              </Field>
+              <Field label="Tipo Contrato (ContractType)">
+                {contractCategories.length > 0
+                  ? <SearchSelect options={contractCategories.map((c: any) => ({ id: c.id, label: c.contract_category_name ?? c.name ?? String(c.id) }))} value={contractCategories.find((c: any) => (c.contract_category_name ?? c.name) === form.ContractType)?.id ?? null} onChange={(_id, opt) => setForm(f => ({ ...f, ContractType: opt?.label ?? "" }))} placeholder="Buscar tipo de contrato..." />
+                  : <input style={S.input} value={form.ContractType ?? ""} onChange={e => setForm(f => ({ ...f, ContractType: e.target.value }))} />}
+              </Field>
+              <Field label="País">
+                <select style={S.select} value={form.Country_ID ?? ""} onChange={e => setForm(f => ({ ...f, Country_ID: e.target.value }))}>
                   <option value="">—</option>
-                  {["Em andamento","Concluído","Cancelado","Aguardando"].map(s => <option key={s}>{s}</option>)}
+                  <option value="10">🇧🇷 Brasil (10)</option>
+                  <option value="20">🌍 Internacional 20</option>
+                  <option value="30">🌍 Internacional 30</option>
+                  <option value="40">🌍 Internacional 40</option>
                 </select>
               </Field>
             </div>
