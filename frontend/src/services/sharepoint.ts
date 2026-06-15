@@ -37,7 +37,10 @@ export function getSpAccount() {
 
 let loginPromise: Promise<void> | null = null;
 
+const isLocalhost = window.location.hostname === 'localhost';
+
 export async function loginSharePoint() {
+  if (isLocalhost) return;
   await initMsal();
   if (!loginPromise) {
     // Preserva a aba atual para restaurar após o redirect
@@ -70,6 +73,7 @@ export async function getListItems(listName: string): Promise<any[]> {
 
   let account = getSpAccount();
   if (!account) {
+    if (isLocalhost) return []; // sem login no localhost
     await loginSharePoint();   // redireciona para login M365
     return [];                 // após redirect, página recarrega
   }
