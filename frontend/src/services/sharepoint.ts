@@ -9,9 +9,22 @@ export function initMsal(): Promise<void> {
   if (!initPromise) {
     initPromise = (async () => {
       await msalInstance.initialize();
-      const result = await msalInstance.handleRedirectPromise();
-      if (result?.account) {
-        msalInstance.setActiveAccount(result.account);
+      try {
+        const result = await msalInstance.handleRedirectPromise();
+        if (result?.account) {
+          msalInstance.setActiveAccount(result.account);
+        }
+      } catch (err: any) {
+        // Estado "interaction_in_progress" preso de um redirect anterior
+        // que não completou (ex.: reload no meio do login) — limpa e segue.
+        if (err?.errorCode === 'interaction_in_progress') {
+          sessionStorage.removeItem('msal.interaction.status');
+          Object.keys(sessionStorage)
+            .filter(k => k.includes('interaction.status'))
+            .forEach(k => sessionStorage.removeItem(k));
+        } else {
+          throw err;
+        }
       }
     })();
   }
