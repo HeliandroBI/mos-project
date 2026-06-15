@@ -1158,7 +1158,7 @@ function ProjectListPage({ spAccount, onLogin, onLogout }: {
         project_number: pn,
         client_id: proj.client_id,
         platform_id: proj.platform_id,
-        contract_category: proj.contract_category,
+        contract_category_id: proj.contract_category_id,
         IDCountry: ID_COUNTRY_BR,
       });
       await loadSP();
@@ -1298,8 +1298,8 @@ function ProjectListPage({ spAccount, onLogin, onLogout }: {
               {filtered.map((row, i) => {
                 const cliName = clients.find((c: any) => c.id === row.client_id)?.client_name ?? (row.client_id != null ? `ID ${row.client_id}` : "—");
                 const platName = platforms.find((p: any) => p.id === row.platform_id)?.platform_name ?? (row.platform_id != null ? `ID ${row.platform_id}` : "—");
-                const catName = categories.find((c: any) => c.id === row.contract_category)?.contract_category_name ?? (row.contract_category != null ? `ID ${row.contract_category}` : "—");
-                const clsName = classifications.find((c: any) => c.id === row.project_classification)?.project_classification_name ?? (row.project_classification != null ? `ID ${row.project_classification}` : "—");
+                const catName = categories.find((c: any) => c.id === row.contract_category_id)?.contract_category_name ?? (row.contract_category_id != null ? `ID ${row.contract_category_id}` : "—");
+                const clsName = classifications.find((c: any) => c.id === row.project_classification_id)?.project_classification_name ?? (row.project_classification_id != null ? `ID ${row.project_classification_id}` : "—");
                 return (
                 <tr key={row.ID ?? i} style={{ background: i % 2 === 0 ? N.card : N.bg }}>
                   <td style={S.td}><div style={{ display: "flex", gap: 2 }}>
@@ -1351,13 +1351,13 @@ function ProjectListPage({ spAccount, onLogin, onLogout }: {
               </Field>
               <Field label="Contract Category">
                 {categories.length > 0
-                  ? <SearchSelect options={categories.map((c: any) => ({ id: c.id, label: c.contract_category_name ?? c.name ?? String(c.id) }))} value={form.contract_category ?? null} onChange={id => setForm(f => ({ ...f, contract_category: id ?? undefined }))} placeholder="Buscar categoria..." />
-                  : <input type="number" style={S.input} value={form.contract_category ?? ""} onChange={e => setForm(f => ({ ...f, contract_category: e.target.value ? +e.target.value : undefined }))} placeholder="ID (backend offline)" />}
+                  ? <SearchSelect options={categories.map((c: any) => ({ id: c.id, label: c.contract_category_name ?? c.name ?? String(c.id) }))} value={form.contract_category_id ?? null} onChange={id => setForm(f => ({ ...f, contract_category_id: id ?? undefined }))} placeholder="Buscar categoria..." />
+                  : <input type="number" style={S.input} value={form.contract_category_id ?? ""} onChange={e => setForm(f => ({ ...f, contract_category_id: e.target.value ? +e.target.value : undefined }))} placeholder="ID (backend offline)" />}
               </Field>
               <Field label="Classification">
                 {classifications.length > 0
-                  ? <SearchSelect options={classifications.map((c: any) => ({ id: c.id, label: c.project_classification_name ?? c.name ?? String(c.id) }))} value={form.project_classification ?? null} onChange={id => setForm(f => ({ ...f, project_classification: id ?? undefined }))} placeholder="Buscar classificação..." />
-                  : <input type="number" style={S.input} value={form.project_classification ?? ""} onChange={e => setForm(f => ({ ...f, project_classification: e.target.value ? +e.target.value : undefined }))} placeholder="ID (backend offline)" />}
+                  ? <SearchSelect options={classifications.map((c: any) => ({ id: c.id, label: c.project_classification_name ?? c.name ?? String(c.id) }))} value={form.project_classification_id ?? null} onChange={id => setForm(f => ({ ...f, project_classification_id: id ?? undefined }))} placeholder="Buscar classificação..." />
+                  : <input type="number" style={S.input} value={form.project_classification_id ?? ""} onChange={e => setForm(f => ({ ...f, project_classification_id: e.target.value ? +e.target.value : undefined }))} placeholder="ID (backend offline)" />}
               </Field>
             </div>
             <div style={{ padding: "0 20px 8px", fontSize: 11, color: N.muted }}>

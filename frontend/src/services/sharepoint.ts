@@ -244,8 +244,8 @@ export interface ProjectItem {
   project_number: number;
   client_id?: number;
   platform_id?: number;
-  contract_category?: number;
-  project_classification?: number;
+  contract_category_id?: number;
+  project_classification_id?: number;
   IDCountry?: number;
 }
 
@@ -262,7 +262,7 @@ async function getDigest(): Promise<string> {
 export async function listProjects(): Promise<ProjectItem[]> {
   const token = await getToken();
   const response = await fetch(
-    `${SITE}/_api/web/lists/getbytitle('${PROJ_LIST}')/items?$select=ID,IDWO,project_number,client_id,platform_id,contract_category,project_classification,IDCountry&$top=5000&$orderby=IDCountry,project_number`,
+    `${SITE}/_api/web/lists/getbytitle('${PROJ_LIST}')/items?$select=ID,IDWO,project_number,client_id,platform_id,contract_category_id,project_classification_id,IDCountry&$top=5000&$orderby=IDCountry,project_number`,
     { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json;odata=verbose' } }
   );
   if (!response.ok) throw new Error(`SharePoint GET project_list: ${response.status}`);
@@ -291,8 +291,8 @@ export async function createProject(data: Omit<ProjectItem, 'ID'>): Promise<Proj
       project_number: data.project_number,
       client_id: data.client_id ?? null,
       platform_id: data.platform_id ?? null,
-      contract_category: data.contract_category ?? null,
-      project_classification: data.project_classification ?? null,
+      contract_category_id: data.contract_category_id ?? null,
+      project_classification_id: data.project_classification_id ?? null,
       IDCountry: idCountry,
     }),
   });
@@ -326,8 +326,8 @@ export async function updateProject(id: number, data: Omit<ProjectItem, 'ID'>): 
       project_number: data.project_number,
       client_id: data.client_id ?? null,
       platform_id: data.platform_id ?? null,
-      contract_category: data.contract_category ?? null,
-      project_classification: data.project_classification ?? null,
+      contract_category_id: data.contract_category_id ?? null,
+      project_classification_id: data.project_classification_id ?? null,
       IDCountry: idCountry,
     }),
   });
