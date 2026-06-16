@@ -1940,16 +1940,44 @@ export default function App() {
           { key: "ativo", label: "Ativo", render: v => v ? "✅" : "❌" },
         ]}
         emptyItem={{ wo: 0, cliente: "", plataforma: "", coordenador: "", tipo_servico: "", ativo: true, vl_diaria: undefined, vl_diaria_locacao: undefined, vl_outros: undefined }}
-        renderForm={(f, set) => (<>
-          <Field label="WO"><input type="number" style={S.input} value={f.wo || ""} onChange={e => set("wo", +e.target.value)} /></Field>
-          <Field label="Cliente"><input style={S.input} value={f.cliente || ""} onChange={e => set("cliente", e.target.value)} /></Field>
-          <Field label="Plataforma"><input style={S.input} value={f.plataforma || ""} onChange={e => set("plataforma", e.target.value)} /></Field>
-          <Field label="Coordenador"><input style={S.input} value={f.coordenador || ""} onChange={e => set("coordenador", e.target.value)} /></Field>
-          <Field label="Tipo Serviço"><select style={S.select} value={f.tipo_servico || ""} onChange={e => set("tipo_servico", e.target.value)}><option value="">—</option>{["SERVIÇO", "LOCAÇÃO", "CONTRATO", "VENDA"].map(d => <option key={d}>{d}</option>)}</select></Field>
-          <Field label="Vl. Diária (SERVIÇO)"><CurrencyInput style={S.input} value={f.vl_diaria} onChange={v => set("vl_diaria", v)} /></Field>
-          <Field label="Vl. Diária Locação"><CurrencyInput style={S.input} value={f.vl_diaria_locacao} onChange={v => set("vl_diaria_locacao", v)} /></Field>
-          <Field label="Vl. Outros"><CurrencyInput style={S.input} value={f.vl_outros} onChange={v => set("vl_outros", v)} /></Field>
-        </>)} />}
+        renderForm={(f, set) => {
+          const qtProjs = STATIC_QUALTECH_PROJECTS as { project_number: number; cliente: string; plataforma: string }[];
+          const coordOpts = ["AJ","AS","GR","MF","MS","TC","VR"];
+          const handleWO = (pn: number) => {
+            set("wo", pn);
+            const qt = qtProjs.find(p => p.project_number === pn);
+            if (qt) { set("cliente", qt.cliente || ""); set("plataforma", qt.plataforma || ""); }
+          };
+          return (<>
+            <Field label="WO">
+              <select style={S.select} value={f.wo || ""} onChange={e => handleWO(+e.target.value)}>
+                <option value="">Selecione a WO...</option>
+                {qtProjs.map(p => (
+                  <option key={p.project_number} value={p.project_number}>
+                    {p.project_number}{p.cliente ? ` — ${p.cliente}` : ""}{p.plataforma ? ` · ${p.plataforma}` : ""}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Cliente"><input style={S.input} value={f.cliente || ""} onChange={e => set("cliente", e.target.value)} placeholder="Auto-preenchido pela WO" /></Field>
+            <Field label="Plataforma"><input style={S.input} value={f.plataforma || ""} onChange={e => set("plataforma", e.target.value)} placeholder="Auto-preenchido pela WO" /></Field>
+            <Field label="Coordenador">
+              <select style={S.select} value={f.coordenador || ""} onChange={e => set("coordenador", e.target.value)}>
+                <option value="">—</option>
+                {coordOpts.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </Field>
+            <Field label="Tipo Serviço">
+              <select style={S.select} value={f.tipo_servico || ""} onChange={e => set("tipo_servico", e.target.value)}>
+                <option value="">—</option>
+                {["SERVIÇO","LOCAÇÃO","CONTRATO","VENDA"].map(d => <option key={d}>{d}</option>)}
+              </select>
+            </Field>
+            <Field label="Vl. Diária (SERVIÇO)"><CurrencyInput style={S.input} value={f.vl_diaria} onChange={v => set("vl_diaria", v)} /></Field>
+            <Field label="Vl. Diária Locação"><CurrencyInput style={S.input} value={f.vl_diaria_locacao} onChange={v => set("vl_diaria_locacao", v)} /></Field>
+            <Field label="Vl. Outros"><CurrencyInput style={S.input} value={f.vl_outros} onChange={v => set("vl_outros", v)} /></Field>
+          </>);
+        }} />}
 
       {tab === "drafts" && <DraftsPage onDraftsChanged={reloadDrafts} />}
       {tab === "qualtech_projects" && <QualtechProjectsPage />}
