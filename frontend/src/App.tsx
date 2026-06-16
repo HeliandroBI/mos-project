@@ -891,57 +891,172 @@ function exportCSV(filename: string, columns: { key: string; label: string }[], 
   URL.revokeObjectURL(url);
 }
 
-// ===== QUALTECH · PROJECTS (API) =====
+// ===== QUALTECH · PROJECTS (CRUD via Azure Function proxy) =====
+const QT_API = "/api/qualtech-projects";
+
+interface QtProject {
+  id?: number;
+  project_number?: number;
+  cliente?: string;
+  plataforma?: string;
+  classificacao?: string;
+  categoria_contrato?: string;
+  client_id?: number;
+  platform_id?: number;
+  project_classification_id?: number;
+  contract_category_id?: number;
+}
+
+const EMPTY_QT: QtProject = { project_number: 0, client_id: undefined, platform_id: undefined, project_classification_id: undefined, contract_category_id: undefined };
+
 function QualtechProjectsPage() {
-  const [rows, setRows] = useState<any[]>([]);
+  const [rows, setRows] = useState<QtProject[]>(STATIC_QUALTECH_PROJECTS as QtProject[]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [editing, setEditing] = useState<QtProject | null>(null);
+  const [delTarget, setDelTarget] = useState<QtProject | null>(null);
+  const [liveMode, setLiveMode] = useState(false);
 
   const load = () => {
-    setRows(STATIC_QUALTECH_PROJECTS as any[]);
+    setLoading(true); setError(null);
+    fetch(QT_API)
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+      .then(data => { setRows(Array.isArray(data) ? data : []); setLiveMode(true); })
+      .catch(err => { setError(String(err)); setRows(STATIC_QUALTECH_PROJECTS as QtProject[]); })
+      .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, []);
+  const save = async (form: QtProject) => {
+    if (!liveMode) { alert("Conecte à API ao vivo primeiro (botão 🔄 API ao vivo)"); return; }
+    try {
+      const isNew = !form.id;
+      const r = await fetch(isNew ? QT_API : `${QT_API}?id=${form.project_number}`, {
+        method: isNew ? "POST" : "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project_number: form.project_number, client_id: form.client_id, platform_id: form.platform_id, project_classification_id: form.project_classification_id, contract_category_id: form.contract_category_id }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setEditing(null);
+      load();
+    } catch (err) { alert("Erro ao salvar: " + String(err)); }
+  };
 
-  const columns = useMemo(() => {
-    const keys = new Set<string>();
-    rows.forEach(r => Object.keys(r).forEach(k => keys.add(k)));
-    return Array.from(keys);
-  }, [rows]);
+  const del = async () => {
+    if (!delTarget || !liveMode) return;
+    try {
+      const r = await fetch(`${QT_API}?id=${delTarget.project_number}`, { method: "DELETE" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setDelTarget(null);
+      load();
+    } catch (err) { alert("Erro ao excluir: " + String(err)); }
+  };
 
   const filtered = useMemo(() => {
     if (!search.trim()) return rows;
     const s = search.trim().toLowerCase();
-    return rows.filter(r => columns.some(c => String(r[c] ?? "").toLowerCase().includes(s)));
-  }, [rows, columns, search]);
+    return rows.filter(r =>
+      String(r.project_number ?? "").includes(s) ||
+      (r.cliente ?? "").toLowerCase().includes(s) ||
+      (r.plataforma ?? "").toLowerCase().includes(s) ||
+      (r.classificacao ?? "").toLowerCase().includes(s) ||
+      (r.categoria_contrato ?? "").toLowerCase().includes(s)
+    );
+  }, [rows, search]);
 
   return (
     <div style={S.card}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
-        <span style={S.cardTitle}>🌐 Qualtech · Projects ({filtered.length})</span>
-        <div style={{ display: "flex", gap: 8 }}>
-          <input
-            style={S.input}
-            placeholder="Filtrar..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-          <button style={{ ...S.input, width: "auto", cursor: "pointer" }} onClick={load}>🔄 Recarregar</button>
+        <span style={S.cardTitle}>
+          🌐 Qualtech · Projects
+          <span style={{ fontSize: 11, fontWeight: 400, marginLeft: 8, color: liveMode ? "#16a34a" : N.muted }}>
+            {liveMode ? "● API ao vivo" : "● dados locais"} ({filtered.length})
+          </span>
+        </span>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <input style={{ ...S.input, width: 180 }} placeholder="Filtrar projeto, cliente..." value={search} onChange={e => setSearch(e.target.value)} />
+          <button style={btn()} onClick={load} disabled={loading}>{loading ? "⏳" : "🔄"} API ao vivo</button>
+          <button style={btn("#2563eb")} onClick={() => setEditing({ ...EMPTY_QT })}>+ Novo</button>
         </div>
       </div>
+
+      {error && <div style={{ color: "#dc2626", fontSize: 12, marginBottom: 8 }}>⚠ {error} — exibindo dados locais</div>}
+
       <div style={{ overflowX: "auto" }}>
         <table style={S.table}>
           <thead>
-            <tr>{columns.map(c => <th key={c} style={S.th}>{c}</th>)}</tr>
+            <tr>
+              <th style={S.th}>WO</th>
+              <th style={S.th}>Cliente</th>
+              <th style={S.th}>Plataforma</th>
+              <th style={S.th}>Classificação</th>
+              <th style={S.th}>Categoria Contrato</th>
+              <th style={{ ...S.th, width: 80 }}>Ações</th>
+            </tr>
           </thead>
           <tbody>
             {filtered.map((r, i) => (
-              <tr key={r.id ?? i}>
-                {columns.map(c => <td key={c} style={S.td}>{String(r[c] ?? "")}</td>)}
+              <tr key={r.id ?? i} style={{ background: i % 2 === 0 ? "transparent" : N.bg }}>
+                <td style={{ ...S.td, fontWeight: 700 }}>{r.project_number}</td>
+                <td style={S.td}>{r.cliente || "—"}</td>
+                <td style={S.td}>{r.plataforma || "—"}</td>
+                <td style={S.td}>{r.classificacao || "—"}</td>
+                <td style={S.td}>{r.categoria_contrato || "—"}</td>
+                <td style={{ ...S.td, whiteSpace: "nowrap" }}>
+                  <button style={btnSm()} onClick={() => setEditing({ ...r })} title="Editar">✏️</button>
+                  <button style={btnSm("#dc2626")} onClick={() => setDelTarget(r)} title="Excluir">🗑</button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {/* Modal edição */}
+      {editing !== null && (
+        <div style={S.modal}>
+          <div style={{ ...S.modalBox, width: 420, padding: 24 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <span style={{ fontWeight: 700, fontSize: 15 }}>{editing.id ? `Editar WO ${editing.project_number}` : "Novo Projeto"}</span>
+              <button style={btnSm()} onClick={() => setEditing(null)}>✕</button>
+            </div>
+            <Field label="Project Number (WO)">
+              <input type="number" style={S.input} value={editing.project_number || ""} onChange={e => setEditing({ ...editing, project_number: +e.target.value })} disabled={!!editing.id} />
+            </Field>
+            <Field label="Client ID">
+              <input type="number" style={S.input} value={editing.client_id || ""} onChange={e => setEditing({ ...editing, client_id: +e.target.value })} />
+            </Field>
+            <Field label="Platform ID">
+              <input type="number" style={S.input} value={editing.platform_id || ""} onChange={e => setEditing({ ...editing, platform_id: +e.target.value })} />
+            </Field>
+            <Field label="Classification ID">
+              <input type="number" style={S.input} value={editing.project_classification_id || ""} onChange={e => setEditing({ ...editing, project_classification_id: +e.target.value })} />
+            </Field>
+            <Field label="Contract Category ID">
+              <input type="number" style={S.input} value={editing.contract_category_id || ""} onChange={e => setEditing({ ...editing, contract_category_id: +e.target.value })} />
+            </Field>
+            {!liveMode && <div style={{ color: "#f59e0b", fontSize: 12, marginBottom: 8 }}>⚠ Modo local: clique "🔄 API ao vivo" para persistir alterações na API.</div>}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
+              <button style={btn(N.muted)} onClick={() => setEditing(null)}>Cancelar</button>
+              <button style={btn("#2563eb")} onClick={() => save(editing)}>Salvar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm delete */}
+      {delTarget && (
+        <div style={S.modal}>
+          <div style={{ ...S.modalBox, width: 360, padding: 24 }}>
+            <p style={{ marginBottom: 16 }}>Excluir projeto <strong>WO {delTarget.project_number}</strong> — {delTarget.cliente}?</p>
+            {!liveMode && <div style={{ color: "#f59e0b", fontSize: 12, marginBottom: 8 }}>⚠ Modo local: a exclusão não será enviada à API.</div>}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button style={btn(N.muted)} onClick={() => setDelTarget(null)}>Cancelar</button>
+              <button style={btn("#dc2626")} onClick={del}>Excluir</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

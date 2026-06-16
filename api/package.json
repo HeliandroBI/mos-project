@@ -1,0 +1,10 @@
+{
+  "name": "mos-api",
+  "version": "1.0.0",
+  "description": "Azure Functions API proxy for MOS Project",
+  "main": "index.js",
+  "scripts": {},
+  "dependencies": {
+    "node-fetch": "^2.7.0"
+  }
+}
