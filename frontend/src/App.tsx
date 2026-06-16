@@ -2,6 +2,7 @@ import Dashboard from "./Dashboard";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { initMsal, getSpAccount, loginSharePoint, logoutSharePoint, postWOToSharePoint, getListItems, getToken, listWOs, createWO, updateWO, deleteWO, getListFields, listProjects, createProject, updateProject, deleteProject, createConta, updateConta, deleteConta, ID_COUNTRY_BR, type WOItem, type ProjectItem } from "./services/sharepoint";
 import { MOCK_CONTAS, MOCK_IMPOSTOS, MOCK_CLIENTES, MOCK_PROJETOS, MOCK_DRAFTS, MOCK_FERIADOS } from "./mockData";
+import { STATIC_DRAFTS, STATIC_CLIENTES_PRAZOS } from "./staticData";
 
 const DEMO = import.meta.env.VITE_DEMO === "true";
 const API = (import.meta.env.VITE_API_URL || "http://localhost:8000") + "/api";
@@ -1099,24 +1100,17 @@ function DraftsPage({ onDraftsChanged }: { onDraftsChanged?: () => void }) {
   const [syncing, setSyncing] = useState(false);
   const [delTarget, setDelTarget] = useState<Draft | null>(null);
 
-  const load = () => apiFetch.get("/drafts/").then(d => { setItems(Array.isArray(d) ? d : []); onDraftsChanged?.(); });
+  const load = () => { setItems(STATIC_DRAFTS as Draft[]); onDraftsChanged?.(); };
   useEffect(() => { load(); }, []);
   const setField = (k: keyof Draft, v: any) => setForm(prev => ({ ...prev, [k]: v }));
 
-  const save = async () => {
-    if (form.id) await apiFetch.put(`/drafts/${form.id}`, form);
-    else await apiFetch.post("/drafts/", form);
-    setEditing(null); load();
-  };
+  const save = async () => { setEditing(null); };
 
   const sincronizar = async () => {
     setSyncing(true);
     try {
-      const r = await apiFetch.post("/drafts/sincronizar", {});
-      alert(`Sincronização concluída!\nDrafts criados: ${r.criados}\nTotal de códigos: ${r.total_codigos}\nContas atualizadas: ${r.contas_atualizadas}`);
-      load();
-    } catch (e: any) { alert(`Erro: ${e.message}`); }
-    finally { setSyncing(false); }
+      alert("Sincronização disponível apenas com backend ativo.");
+    } finally { setSyncing(false); }
   };
 
   const del = async (responsavel: string, motivo: string) => {
@@ -1133,10 +1127,9 @@ function DraftsPage({ onDraftsChanged }: { onDraftsChanged?: () => void }) {
           <span style={S.cardTitle}>📝 Drafts ({items.length})</span>
           <div style={{ display: "flex", gap: 6 }}>
             <button style={btn("#059669")} onClick={() => {
-              apiFetch.get("/drafts/proximo").then(r => {
-                setForm({ codigo: r.proximo, data_draft: new Date().toISOString().slice(0, 10), descricao: "", ativo: true });
-                setEditing({ codigo: r.proximo, ativo: true });
-              });
+              const proximo = Math.max(0, ...items.map(d => d.codigo ?? 0)) + 1;
+              setForm({ codigo: proximo, data_draft: new Date().toISOString().slice(0, 10), descricao: "", ativo: true });
+              setEditing({ codigo: proximo, ativo: true });
             }}>➕ Nova Draft</button>
             <button style={btn("#0891b2")} onClick={sincronizar} disabled={syncing} title="Importa automaticamente todos os códigos de draft usados nas Contas a Receber">
               {syncing ? "⏳ Sincronizando..." : "⟳ Sincronizar das Contas"}
@@ -1712,7 +1705,7 @@ export default function App() {
     return () => document.removeEventListener("mousedown", close);
   }, [settingsOpen]);
 
-  const reloadDrafts = () => apiFetch.get("/drafts/").then(d => setDrafts(Array.isArray(d) ? d : [])).catch(() => {});
+  const reloadDrafts = () => setDrafts(STATIC_DRAFTS as Draft[]);
 
   useEffect(() => {
     reloadDrafts();
@@ -1861,7 +1854,7 @@ export default function App() {
           <Field label="Vigência Início"><input type="date" style={S.input} value={f.vigencia_inicio} onChange={e => set("vigencia_inicio", e.target.value)} /></Field>
         </>)} />}
 
-      {tab === "clientes" && <CRUDPage<ClientePrazo> title="Prazos por Cliente" icon="👥" endpoint="clientes-prazos"
+      {tab === "clientes" && <CRUDPage<ClientePrazo> title="Prazos por Cliente" icon="👥" endpoint="clientes-prazos" staticData={STATIC_CLIENTES_PRAZOS as ClientePrazo[]}
         columns={[{ key: "cliente", label: "Cliente" }, { key: "rec_doc", label: "Rec. Doc" }, { key: "medicao", label: "Medição" }, { key: "resp_cli", label: "Resp. Cli" }, { key: "vencimento", label: "Vencimento" }, { key: "cambio", label: "Câmbio" }, { key: "total_dias", label: "Total", render: v => <strong>{v}</strong> }, { key: "data_limite", label: "Dia Limite" }]}
         emptyItem={{ cliente: "", rec_doc: 5, medicao: 3, resp_cli: 10, vencimento: 30, cambio: 0, data_limite: 30 }}
         renderForm={(f, set) => (<>
