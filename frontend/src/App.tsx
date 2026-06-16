@@ -1,22 +1,11 @@
 import Dashboard from "./Dashboard";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { initMsal, getSpAccount, loginSharePoint, logoutSharePoint, postWOToSharePoint, getListItems, getToken, listWOs, createWO, updateWO, deleteWO, getListFields, listProjects, createProject, updateProject, deleteProject, createConta, updateConta, deleteConta, listProjetosFromSP, createProjeto, updateProjeto, deleteProjeto, ID_COUNTRY_BR, type WOItem, type ProjectItem } from "./services/sharepoint";
-import { MOCK_CONTAS, MOCK_IMPOSTOS, MOCK_CLIENTES, MOCK_PROJETOS, MOCK_DRAFTS, MOCK_FERIADOS } from "./mockData";
+
 import { STATIC_DRAFTS, STATIC_CLIENTES_PRAZOS } from "./staticData";
 import STATIC_PROJETOS_RAW from "./staticProjetos.json";
 import STATIC_QUALTECH_PROJECTS from "./staticQualtechProjects.json";
 
-const DEMO = import.meta.env.VITE_DEMO === "true";
-const API = (import.meta.env.VITE_API_URL || "http://localhost:8000") + "/api";
-
-const MOCK_MAP: Record<string, any[]> = {
-  "/contas-receber/": MOCK_CONTAS,
-  "/impostos/": MOCK_IMPOSTOS,
-  "/clientes-prazos/": MOCK_CLIENTES,
-  "/projetos/": MOCK_PROJETOS,
-  "/drafts/": MOCK_DRAFTS,
-  "/feriados/": MOCK_FERIADOS,
-};
 
 type Tab = "contas" | "dashboard" | "impostos" | "clientes" | "projetos" | "drafts" | "feriados"
          | "qualtech_projects";
@@ -88,18 +77,6 @@ interface Projeto { id?: number; wo: number; cliente?: string; plataforma?: stri
 interface Draft { id?: number; codigo: number; data_draft?: string; descricao?: string; ativo?: boolean; }
 interface Feriado { id?: number; data: string; nome: string; tipo: string; estado?: string; municipio?: string; pais: string; }
 
-const apiFetch = {
-  get: (url: string) => {
-    if (DEMO) {
-      const key = Object.keys(MOCK_MAP).find(k => url.startsWith(k));
-      return Promise.resolve(key ? MOCK_MAP[key] : []);
-    }
-    return fetch(`${API}${url}`).then(r => r.json());
-  },
-  post: (_url: string, _data: any) => DEMO ? Promise.resolve({}) : fetch(`${API}${_url}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(_data) }).then(r => r.json()),
-  put: (_url: string, _data: any) => DEMO ? Promise.resolve({}) : fetch(`${API}${_url}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(_data) }).then(r => r.json()),
-  del: (_url: string) => DEMO ? Promise.resolve({}) : fetch(`${API}${_url}`, { method: "DELETE" }).then(r => r.json()),
-};
 
 const fmt = {
   brl: (v?: number) => v != null ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v) : "-",
@@ -365,20 +342,10 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, onDraftsChanged, 
   const todayLabel = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 
   const handleSave = async () => {
-    let finalForm = { ...form };
-    // Se draft_id = 0 → auto-criar nova draft
+    const finalForm = { ...form };
+    // Drafts são estáticos — não cria via API
     if (!finalForm.draft_id) {
-      try {
-        const newDraft = await apiFetch.post("/drafts/", {
-          codigo: proximoCodigo,
-          data_draft: finalForm.data_draft || finalForm.data_doc || null,
-          ativo: true,
-        });
-        if (newDraft?.id) {
-          finalForm = { ...finalForm, draft_id: newDraft.id };
-          onDraftsChanged?.();
-        }
-      } catch { /* ignora se já existe, segue sem draft */ }
+      onDraftsChanged?.();
     }
     onSave(finalForm);
     // Post to SharePoint if logged in
@@ -594,10 +561,10 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
 
   // Busca dados do SP — só chama quando realmente precisa recarregar
   const fetchData = useCallback(async () => {
-    if (!DEMO && !getSpAccount()) return;
+    if (!getSpAccount()) return;
     setLoading(true);
     try {
-      const data: ContaReceber[] = DEMO ? MOCK_CONTAS : await getListItems('fContasReceber');
+      const data: ContaReceber[] = await getListItems('fContasReceber');
       allDataRef.current = data;
       // Popula dimensões uma única vez
       const uniqBy = <T,>(arr: T[], key: (x: T) => any) => { const seen = new Set(); return arr.filter(x => { const k = key(x); return seen.has(k) ? false : seen.add(k); }); };
@@ -753,11 +720,8 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
           <span style={S.cardTitle}>📋 Contas a Receber · {total.total} registros {loading && "⏳"}</span>
           <div style={{ display: "flex", gap: 5 }}>
             <button style={btn("#059669")} onClick={() => setEditing({})}>➕ Novo</button>
-            <button style={btn("#0891b2")} title="Recalcula VL.Bruto, impostos, Vencimento, Prev.Fat e Prev.Pag de todos os registros" onClick={async () => {
-              if (!confirm("Recalcular VL.Bruto, impostos e datas de TODOS os registros?\nIsso pode sobrescrever valores manuais em Vencimento, Prev.Fat e Prev.Pag.")) return;
-              const r = await apiFetch.post("/contas-receber/recalcular", {});
-              alert(`Recálculo concluído: ${r.atualizados} registros atualizados.`);
-              load();
+            <button style={btn("#0891b2")} title="Recalcula VL.Bruto, impostos, Vencimento, Prev.Fat e Prev.Pag de todos os registros" onClick={() => {
+              alert("Recálculo disponível apenas com backend ativo.");
             }}>⟳ Recalcular Tudo</button>
             <button style={btn("#6366f1")} onClick={async () => {
               try {
@@ -769,7 +733,6 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
                 alert('Campos fContasReceber:\n\n' + fields.join('\n'));
               } catch(e: any) { alert('Erro: ' + e.message); }
             }}>🔍 Ver campos SP</button>
-            <button style={btn("#6366f1")} onClick={() => window.open(`${API}/contas-receber/modelo-csv/download`)}>⬇ Modelo CSV</button>
             <label style={{ ...btn("#f59e0b"), cursor: "pointer" }}>📤 Importar CSV<input type="file" accept=".csv" style={{ display: "none" }} onChange={uploadCSV} /></label>
           </div>
         </div>
@@ -783,7 +746,7 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
             <tbody>
               {items.length === 0 && !loading && (
                 <tr><td colSpan={20} style={{ ...S.td, textAlign: "center", color: "#94a3b8", padding: 40 }}>
-                  {!DEMO && !spAccount
+                  {!spAccount
                     ? <span>🔑 Clique em <strong>Entrar</strong> no topo da página para carregar os dados do SharePoint.</span>
                     : 'Nenhum registro. Clique em "➕ Novo" ou "📤 Importar CSV".'}
                 </td></tr>
@@ -1079,15 +1042,14 @@ function CRUDPage<T extends { id?: number }>({ title, icon, endpoint, columns, e
   const load = () => {
     if (spLoad) { spLoad().then(data => setItems(data)).catch(() => { if (staticData) setItems(staticData); }); return; }
     if (staticData) { setItems(staticData); return; }
-    apiFetch.get(`/${endpoint}/`).then(data => setItems(Array.isArray(data) ? data : data.items || []));
+    setItems([]);
   };
   useEffect(() => { load(); }, []);
   const setField = (k: keyof T, v: any) => setForm(prev => ({ ...prev, [k]: v }));
   const save = async () => {
     if (spSave) { await spSave(form); setEditing(null); load(); return; }
-    if (form.id) await apiFetch.put(`/${endpoint}/${form.id}`, form);
-    else await apiFetch.post(`/${endpoint}/`, form);
-    setEditing(null); load();
+    console.warn("Save não disponível: sem backend ou SP configurado");
+    setEditing(null);
   };
   const del = async (responsavel: string, motivo: string) => {
     if (!delTarget?.id) return;
@@ -1198,15 +1160,9 @@ function DeleteModal({ info, onConfirm, onCancel }: {
   );
 }
 
-async function logAndDelete(endpoint: string, id: number, resumo: string, responsavel: string, motivo: string) {
-  await apiFetch.post("/setup/audit-log", {
-    tabela: endpoint,
-    registro_id: id,
-    resumo,
-    responsavel,
-    motivo,
-  });
-  await apiFetch.del(`/${endpoint}/${id}`);
+async function logAndDelete(_endpoint: string, _id: number, _resumo: string, _responsavel: string, _motivo: string) {
+  // Audit log e delete via backend removidos — use spDelete para entidades com SharePoint
+  console.warn("logAndDelete: operação não disponível sem backend.");
 }
 
 // ===== DRAFTS PAGE =====
@@ -1341,8 +1297,6 @@ function ProjectListPage({ spAccount, onLogin, onLogout }: {
   const [saving, setSaving]       = useState(false);
   const [search, setSearch]       = useState("");
 
-  const BACKEND = import.meta.env.VITE_API_URL || "http://localhost:8000";
-
   const loadSP = async () => {
     if (!spAccount) return;
     setLoading(true); setError(null);
@@ -1352,20 +1306,12 @@ function ProjectListPage({ spAccount, onLogin, onLogout }: {
   };
 
   const loadAPI = async () => {
-    try {
-      const [proj, cli, plat, cat, cls] = await Promise.all([
-        fetch(`${BACKEND}/api/qualtech/api-projects`).then(r => r.ok ? r.json() : []),
-        fetch(`${BACKEND}/api/qualtech/api-clients`).then(r => r.ok ? r.json() : []),
-        fetch(`${BACKEND}/api/qualtech/api-platforms`).then(r => r.ok ? r.json() : []),
-        fetch(`${BACKEND}/api/qualtech/api-contract-categories`).then(r => r.ok ? r.json() : []),
-        fetch(`${BACKEND}/api/qualtech/api-classifications`).then(r => r.ok ? r.json() : []),
-      ]);
-      setApiItems(proj);
-      setClients(cli);
-      setPlatforms(plat);
-      setCategories(cat);
-      setClassifications(cls);
-    } catch { /* backend offline */ }
+    // Backend Railway removido — sem dados de API externos
+    setApiItems([]);
+    setClients([]);
+    setPlatforms([]);
+    setCategories([]);
+    setClassifications([]);
   };
 
   useEffect(() => { loadSP(); loadAPI(); }, [spAccount]);
@@ -1616,8 +1562,6 @@ function ListaWOsPage({ spAccount, onLogin, onLogout }: {
   const [platforms, setPlatforms] = useState<any[]>([]);
   const [contractCategories, setContractCategories] = useState<any[]>([]);
 
-  const BACKEND = import.meta.env.VITE_API_URL || "http://localhost:8000";
-
   const load = async () => {
     if (!spAccount) return;
     setLoading(true); setError(null);
@@ -1632,16 +1576,10 @@ function ListaWOsPage({ spAccount, onLogin, onLogout }: {
   };
 
   const loadApiOptions = async () => {
-    try {
-      const [cli, plat, cat] = await Promise.all([
-        fetch(`${BACKEND}/api/qualtech/api-clients`).then(r => r.ok ? r.json() : []),
-        fetch(`${BACKEND}/api/qualtech/api-platforms`).then(r => r.ok ? r.json() : []),
-        fetch(`${BACKEND}/api/qualtech/api-contract-categories`).then(r => r.ok ? r.json() : []),
-      ]);
-      setClients(Array.isArray(cli) ? cli : []);
-      setPlatforms(Array.isArray(plat) ? plat : []);
-      setContractCategories(Array.isArray(cat) ? cat : []);
-    } catch { /* API Qualtech indisponível — segue com inputs manuais */ }
+    // Backend Railway removido — inputs manuais sem lookup de API
+    setClients([]);
+    setPlatforms([]);
+    setContractCategories([]);
   };
 
   useEffect(() => { load(); loadApiOptions(); }, [spAccount]);
