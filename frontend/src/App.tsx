@@ -18,6 +18,55 @@ const MOCK_MAP: Record<string, any[]> = {
 type Tab = "contas" | "dashboard" | "impostos" | "clientes" | "projetos" | "drafts" | "feriados"
          | "qualtech_projects";
 
+const STATIC_IMPOSTOS: Imposto[] = [
+  { id:1,  nome:"COFINS", tipo:"retido_fonte", tipo_documento:"NFSe",  tipo_servico:undefined, cidade:undefined, aliquota:0.03,   vigencia_inicio:"2020-01-01", ativo:true },
+  { id:2,  nome:"CSLL",   tipo:"retido_fonte", tipo_documento:"NFSe",  tipo_servico:undefined, cidade:undefined, aliquota:0.01,   vigencia_inicio:"2020-01-01", ativo:true },
+  { id:3,  nome:"IRPJ",   tipo:"retido_fonte", tipo_documento:"NFSe",  tipo_servico:undefined, cidade:undefined, aliquota:0.015,  vigencia_inicio:"2020-01-01", ativo:true },
+  { id:4,  nome:"PIS",    tipo:"retido_fonte", tipo_documento:"NFSe",  tipo_servico:undefined, cidade:undefined, aliquota:0.0065, vigencia_inicio:"2020-01-01", ativo:true },
+  { id:5,  nome:"COFINS", tipo:"a_pagar",      tipo_documento:undefined,tipo_servico:undefined, cidade:undefined, aliquota:0.076,  vigencia_inicio:"2020-01-01", ativo:true },
+  { id:6,  nome:"CSLL",   tipo:"a_pagar",      tipo_documento:undefined,tipo_servico:undefined, cidade:undefined, aliquota:0.0288, vigencia_inicio:"2020-01-01", ativo:true },
+  { id:7,  nome:"ICMS",   tipo:"a_pagar",      tipo_documento:"DANFE", tipo_servico:undefined, cidade:undefined, aliquota:0.2,    vigencia_inicio:"2020-01-01", ativo:true },
+  { id:8,  nome:"IRPJ",   tipo:"a_pagar",      tipo_documento:undefined,tipo_servico:undefined, cidade:undefined, aliquota:0.048,  vigencia_inicio:"2020-01-01", ativo:true },
+  { id:9,  nome:"PIS",    tipo:"a_pagar",      tipo_documento:undefined,tipo_servico:undefined, cidade:undefined, aliquota:0.0165, vigencia_inicio:"2020-01-01", ativo:true },
+  { id:10, nome:"INSS",   tipo:"retido_fonte", tipo_documento:"NFSe",  tipo_servico:"CONTRATO", cidade:undefined, aliquota:0.11,   vigencia_inicio:"2020-01-01", ativo:true },
+];
+
+const STATIC_FERIADOS: Feriado[] = [
+  { id:1,  data:"2025-01-01", nome:"Confraternização Universal",  tipo:"nacional", pais:"BR" },
+  { id:2,  data:"2025-04-21", nome:"Tiradentes",                  tipo:"nacional", pais:"BR" },
+  { id:3,  data:"2025-05-01", nome:"Dia do Trabalho",             tipo:"nacional", pais:"BR" },
+  { id:4,  data:"2025-09-07", nome:"Independência do Brasil",     tipo:"nacional", pais:"BR" },
+  { id:5,  data:"2025-12-25", nome:"Natal",                       tipo:"nacional", pais:"BR" },
+  { id:6,  data:"2026-01-01", nome:"Confraternização Universal",  tipo:"nacional", pais:"BR" },
+  { id:7,  data:"2026-02-16", nome:"Carnaval (segunda)",          tipo:"nacional", pais:"BR" },
+  { id:8,  data:"2026-02-17", nome:"Carnaval (terça)",            tipo:"nacional", pais:"BR" },
+  { id:9,  data:"2026-04-03", nome:"Sexta-Feira Santa",           tipo:"nacional", pais:"BR" },
+  { id:10, data:"2026-04-05", nome:"Páscoa",                      tipo:"nacional", pais:"BR" },
+  { id:11, data:"2026-04-21", nome:"Tiradentes",                  tipo:"nacional", pais:"BR" },
+  { id:12, data:"2026-05-01", nome:"Dia do Trabalho",             tipo:"nacional", pais:"BR" },
+  { id:13, data:"2026-06-04", nome:"Corpus Christi",              tipo:"nacional", pais:"BR" },
+  { id:14, data:"2026-09-07", nome:"Independência do Brasil",     tipo:"nacional", pais:"BR" },
+  { id:15, data:"2026-10-12", nome:"Nossa Senhora Aparecida",     tipo:"nacional", pais:"BR" },
+  { id:16, data:"2026-11-02", nome:"Finados",                     tipo:"nacional", pais:"BR" },
+  { id:17, data:"2026-11-15", nome:"Proclamação da República",    tipo:"nacional", pais:"BR" },
+  { id:18, data:"2026-11-20", nome:"Consciência Negra",           tipo:"nacional", pais:"BR" },
+  { id:19, data:"2026-12-25", nome:"Natal",                       tipo:"nacional", pais:"BR" },
+  { id:20, data:"2027-01-01", nome:"Confraternização Universal",  tipo:"nacional", pais:"BR" },
+  { id:21, data:"2027-03-01", nome:"Carnaval (segunda)",          tipo:"nacional", pais:"BR" },
+  { id:22, data:"2027-03-02", nome:"Carnaval (terça)",            tipo:"nacional", pais:"BR" },
+  { id:23, data:"2027-03-26", nome:"Sexta-Feira Santa",           tipo:"nacional", pais:"BR" },
+  { id:24, data:"2027-03-28", nome:"Páscoa",                      tipo:"nacional", pais:"BR" },
+  { id:25, data:"2027-04-21", nome:"Tiradentes",                  tipo:"nacional", pais:"BR" },
+  { id:26, data:"2027-05-01", nome:"Dia do Trabalho",             tipo:"nacional", pais:"BR" },
+  { id:27, data:"2027-05-27", nome:"Corpus Christi",              tipo:"nacional", pais:"BR" },
+  { id:28, data:"2027-09-07", nome:"Independência do Brasil",     tipo:"nacional", pais:"BR" },
+  { id:29, data:"2027-10-12", nome:"Nossa Senhora Aparecida",     tipo:"nacional", pais:"BR" },
+  { id:30, data:"2027-11-02", nome:"Finados",                     tipo:"nacional", pais:"BR" },
+  { id:31, data:"2027-11-15", nome:"Proclamação da República",    tipo:"nacional", pais:"BR" },
+  { id:32, data:"2027-11-20", nome:"Consciência Negra",           tipo:"nacional", pais:"BR" },
+  { id:33, data:"2027-12-25", nome:"Natal",                       tipo:"nacional", pais:"BR" },
+];
+
 interface ContaReceber {
   id?: number; wo?: number; draft_id?: number; draft_codigo?: number; _novaDraft?: boolean;
   cliente?: string; plataforma?: string; coord_focal?: string; tipo_servico?: string;
@@ -904,17 +953,18 @@ function QualtechProjectsPage() {
 }
 
 // ===== GENERIC CRUD =====
-function CRUDPage<T extends { id?: number }>({ title, icon, endpoint, columns, emptyItem, renderForm, info, extraButton }: {
+function CRUDPage<T extends { id?: number }>({ title, icon, endpoint, columns, emptyItem, renderForm, info, extraButton, staticData }: {
   title: string; icon: string; endpoint: string; info?: string;
   columns: { key: string; label: string; render?: (v: any, row: T) => React.ReactNode }[];
   emptyItem: T; renderForm: (form: T, set: (k: keyof T, v: any) => void) => React.ReactNode;
   extraButton?: (reload: () => void) => React.ReactNode;
+  staticData?: T[];
 }) {
-  const [items, setItems] = useState<T[]>([]);
+  const [items, setItems] = useState<T[]>(staticData ?? []);
   const [editing, setEditing] = useState<T | null>(null);
   const [form, setForm] = useState<T>(emptyItem);
   const [delTarget, setDelTarget] = useState<T | null>(null);
-  const load = () => apiFetch.get(`/${endpoint}/`).then(data => setItems(Array.isArray(data) ? data : data.items || []));
+  const load = () => staticData ? setItems(staticData) : apiFetch.get(`/${endpoint}/`).then(data => setItems(Array.isArray(data) ? data : data.items || []));
   useEffect(() => { load(); }, []);
   const setField = (k: keyof T, v: any) => setForm(prev => ({ ...prev, [k]: v }));
   const save = async () => {
@@ -1799,7 +1849,7 @@ export default function App() {
       {tab === "dashboard" && <Dashboard dark={dark} onToggleDark={toggleDark} page={dashPage} onPageChange={setDashPage} />}
       {tab === "contas" && <ContasPage drafts={drafts} projetos={projetos} onDraftsChanged={reloadDrafts} spAccount={spAccount} />}
 
-      {tab === "impostos" && <CRUDPage<Imposto> title="Impostos" icon="🧾" endpoint="impostos"
+      {tab === "impostos" && <CRUDPage<Imposto> title="Impostos" icon="🧾" endpoint="impostos" staticData={STATIC_IMPOSTOS}
         columns={[{ key: "nome", label: "Imposto" }, { key: "tipo", label: "Tipo", render: v => <Badge text={v === "retido_fonte" ? "Retido" : "A Pagar"} /> }, { key: "tipo_documento", label: "Documento" }, { key: "tipo_servico", label: "Tipo Serviço" }, { key: "cidade", label: "Cidade" }, { key: "aliquota", label: "Alíquota", render: v => <strong style={{ color: "#dc2626" }}>{fmt.pct(v)}</strong> }, { key: "vigencia_inicio", label: "Vigência", render: v => fmt.date(v) }]}
         emptyItem={{ nome: "", tipo: "retido_fonte", aliquota: 0, vigencia_inicio: "2020-01-01", ativo: true }}
         renderForm={(f, set) => (<>
@@ -1848,7 +1898,7 @@ export default function App() {
       {tab === "drafts" && <DraftsPage onDraftsChanged={reloadDrafts} />}
       {tab === "qualtech_projects" && <QualtechProjectsPage />}
 
-      {tab === "feriados" && <CRUDPage<Feriado> title="Feriados" icon="📅" endpoint="feriados"
+      {tab === "feriados" && <CRUDPage<Feriado> title="Feriados" icon="📅" endpoint="feriados" staticData={STATIC_FERIADOS}
         columns={[{ key: "data", label: "Data", render: v => fmt.date(v) }, { key: "nome", label: "Nome" }, { key: "tipo", label: "Tipo", render: v => <Badge text={v} /> }, { key: "estado", label: "Estado" }, { key: "municipio", label: "Município" }, { key: "pais", label: "País" }]}
         emptyItem={{ data: "", nome: "", tipo: "nacional", pais: "BR" }}
         renderForm={(f, set) => (<>
