@@ -4,6 +4,7 @@ import { initMsal, getSpAccount, loginSharePoint, logoutSharePoint, postWOToShar
 import { MOCK_CONTAS, MOCK_IMPOSTOS, MOCK_CLIENTES, MOCK_PROJETOS, MOCK_DRAFTS, MOCK_FERIADOS } from "./mockData";
 import { STATIC_DRAFTS, STATIC_CLIENTES_PRAZOS } from "./staticData";
 import STATIC_PROJETOS_RAW from "./staticProjetos.json";
+import STATIC_QUALTECH_PROJECTS from "./staticQualtechProjects.json";
 
 const DEMO = import.meta.env.VITE_DEMO === "true";
 const API = (import.meta.env.VITE_API_URL || "http://localhost:8000") + "/api";
@@ -893,18 +894,10 @@ function exportCSV(filename: string, columns: { key: string; label: string }[], 
 // ===== QUALTECH · PROJECTS (API) =====
 function QualtechProjectsPage() {
   const [rows, setRows] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
   const load = () => {
-    setLoading(true);
-    setError(null);
-    fetch(`${API}/qualtech/api-projects`)
-      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
-      .then(data => setRows(Array.isArray(data) ? data : []))
-      .catch(err => setError(String(err)))
-      .finally(() => setLoading(false));
+    setRows(STATIC_QUALTECH_PROJECTS as any[]);
   };
 
   useEffect(() => { load(); }, []);
@@ -924,7 +917,7 @@ function QualtechProjectsPage() {
   return (
     <div style={S.card}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
-        <span style={S.cardTitle}>🌐 Qualtech · Projects {loading ? "⏳" : `(${filtered.length})`}</span>
+        <span style={S.cardTitle}>🌐 Qualtech · Projects ({filtered.length})</span>
         <div style={{ display: "flex", gap: 8 }}>
           <input
             style={S.input}
@@ -935,7 +928,6 @@ function QualtechProjectsPage() {
           <button style={{ ...S.input, width: "auto", cursor: "pointer" }} onClick={load}>🔄 Recarregar</button>
         </div>
       </div>
-      {error && <div style={{ color: "#dc2626", marginBottom: 8 }}>Erro: {error}</div>}
       <div style={{ overflowX: "auto" }}>
         <table style={S.table}>
           <thead>
