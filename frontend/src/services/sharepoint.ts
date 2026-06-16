@@ -454,3 +454,97 @@ export async function deleteConta(id: number): Promise<void> {
   }
   clearCache(CONTAS_LIST);
 }
+
+// ── Projetos / WO (lista projetosdiarias) ────────────────────────────────────
+const PROJDIARIAS_LIST = 'projetosdiarias';
+
+function mapSpToProjeto(item: any) {
+  const parseNum = (v: any) => {
+    if (v == null || v === '' || v === '0') return undefined;
+    const n = parseFloat(String(v).replace(',', '.'));
+    return isNaN(n) ? undefined : n;
+  };
+  const parseStr = (v: any) => {
+    if (v == null || String(v).trim() === '0') return '';
+    return String(v).trim();
+  };
+  return {
+    id: item.ID,
+    wo: item.WO ? Math.round(item.WO) : 0,
+    cliente: parseStr(item.CLIENTE),
+    plataforma: parseStr(item.PLATAFORMA),
+    coordenador: parseStr(item['COORD_x0020_FOCAL']),
+    tipo_servico: parseStr(item['TIPO_x0020_DE_x0020_SERVI_x00c7_']),
+    ativo: true,
+    vl_diaria: parseNum(item['VL_x002e__x0020_DI_x00c1_RIA']),
+    vl_diaria_locacao: parseNum(item['VL_x002e__x0020_DI_x00c1_RIA_x00']),
+    vl_outros: parseNum(item['VL_x002e__x0020_OUTROS']),
+  };
+}
+
+function projetoToSp(p: any) {
+  return {
+    Title: String(p.wo),
+    WO: p.wo,
+    CLIENTE: p.cliente || '',
+    PLATAFORMA: p.plataforma || '',
+    COORD_x0020_FOCAL: p.coordenador || '',
+    'TIPO_x0020_DE_x0020_SERVI_x00c7_': p.tipo_servico || '',
+    'VL_x002e__x0020_DI_x00c1_RIA': p.vl_diaria != null ? String(p.vl_diaria) : null,
+    'VL_x002e__x0020_DI_x00c1_RIA_x00': p.vl_diaria_locacao != null ? String(p.vl_diaria_locacao) : null,
+    'VL_x002e__x0020_OUTROS': p.vl_outros != null ? String(p.vl_outros) : null,
+  };
+}
+
+let _projetosCache: any[] | null = null;
+
+export async function listProjetosFromSP(): Promise<any[]> {
+  if (_projetosCache) return _projetosCache;
+  const token = await getToken();
+  let all: any[] = [];
+  let url: string | null = `${SITE}/_api/web/lists/getbytitle('${PROJ_LIST}')/items?$top=2000&$orderby=WO asc`;
+  while (url) {
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json;odata=nometadata' } });
+    if (!r.ok) throw new Error(`SP listProjetos: ${r.status}`);
+    const json = await r.json();
+    all = all.concat(json.value || []);
+    url = json['odata.nextLink'] || null;
+  }
+  _projetosCache = all.map(mapSpToProjeto);
+  return _projetosCache;
+}
+
+export async function createProjeto(p: any): Promise<void> {
+  const token = await getToken();
+  const digest = await getDigest();
+  const r = await fetch(`${SITE}/_api/web/lists/getbytitle('${PROJ_LIST}')/items`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'X-RequestDigest': digest, 'Content-Type': 'application/json', Accept: 'application/json;odata=nometadata' },
+    body: JSON.stringify(projetoToSp(p)),
+  });
+  if (!r.ok) throw new Error(`SP createProjeto: ${r.status} — ${(await r.text()).slice(0, 200)}`);
+  _projetosCache = null;
+}
+
+export async function updateProjeto(id: number, p: any): Promise<void> {
+  const token = await getToken();
+  const digest = await getDigest();
+  const r = await fetch(`${SITE}/_api/web/lists/getbytitle('${PROJ_LIST}')/items(${id})`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'X-RequestDigest': digest, 'Content-Type': 'application/json', Accept: 'application/json;odata=nometadata', 'X-HTTP-Method': 'MERGE', 'If-Match': '*' },
+    body: JSON.stringify(projetoToSp(p)),
+  });
+  if (!r.ok) throw new Error(`SP updateProjeto: ${r.status} — ${(await r.text()).slice(0, 200)}`);
+  _projetosCache = null;
+}
+
+export async function deleteProjeto(id: number): Promise<void> {
+  const token = await getToken();
+  const digest = await getDigest();
+  const r = await fetch(`${SITE}/_api/web/lists/getbytitle('${PROJ_LIST}')/items(${id})`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'X-RequestDigest': digest, 'X-HTTP-Method': 'DELETE', 'If-Match': '*' },
+  });
+  if (!r.ok) throw new Error(`SP deleteProjeto: ${r.status} — ${(await r.text()).slice(0, 200)}`);
+  _projetosCache = null;
+}

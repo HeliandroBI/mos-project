@@ -1,6 +1,6 @@
 import Dashboard from "./Dashboard";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { initMsal, getSpAccount, loginSharePoint, logoutSharePoint, postWOToSharePoint, getListItems, getToken, listWOs, createWO, updateWO, deleteWO, getListFields, listProjects, createProject, updateProject, deleteProject, createConta, updateConta, deleteConta, ID_COUNTRY_BR, type WOItem, type ProjectItem } from "./services/sharepoint";
+import { initMsal, getSpAccount, loginSharePoint, logoutSharePoint, postWOToSharePoint, getListItems, getToken, listWOs, createWO, updateWO, deleteWO, getListFields, listProjects, createProject, updateProject, deleteProject, createConta, updateConta, deleteConta, listProjetosFromSP, createProjeto, updateProjeto, deleteProjeto, ID_COUNTRY_BR, type WOItem, type ProjectItem } from "./services/sharepoint";
 import { MOCK_CONTAS, MOCK_IMPOSTOS, MOCK_CLIENTES, MOCK_PROJETOS, MOCK_DRAFTS, MOCK_FERIADOS } from "./mockData";
 import { STATIC_DRAFTS, STATIC_CLIENTES_PRAZOS } from "./staticData";
 import STATIC_PROJETOS_RAW from "./staticProjetos.json";
@@ -1062,27 +1062,36 @@ function QualtechProjectsPage() {
 }
 
 // ===== GENERIC CRUD =====
-function CRUDPage<T extends { id?: number }>({ title, icon, endpoint, columns, emptyItem, renderForm, info, extraButton, staticData }: {
+function CRUDPage<T extends { id?: number }>({ title, icon, endpoint, columns, emptyItem, renderForm, info, extraButton, staticData, spLoad, spSave, spDelete }: {
   title: string; icon: string; endpoint: string; info?: string;
   columns: { key: string; label: string; render?: (v: any, row: T) => React.ReactNode }[];
   emptyItem: T; renderForm: (form: T, set: (k: keyof T, v: any) => void) => React.ReactNode;
   extraButton?: (reload: () => void) => React.ReactNode;
   staticData?: T[];
+  spLoad?: () => Promise<T[]>;
+  spSave?: (form: T) => Promise<void>;
+  spDelete?: (id: number) => Promise<void>;
 }) {
   const [items, setItems] = useState<T[]>(staticData ?? []);
   const [editing, setEditing] = useState<T | null>(null);
   const [form, setForm] = useState<T>(emptyItem);
   const [delTarget, setDelTarget] = useState<T | null>(null);
-  const load = () => staticData ? setItems(staticData) : apiFetch.get(`/${endpoint}/`).then(data => setItems(Array.isArray(data) ? data : data.items || []));
+  const load = () => {
+    if (spLoad) { spLoad().then(data => setItems(data)).catch(() => { if (staticData) setItems(staticData); }); return; }
+    if (staticData) { setItems(staticData); return; }
+    apiFetch.get(`/${endpoint}/`).then(data => setItems(Array.isArray(data) ? data : data.items || []));
+  };
   useEffect(() => { load(); }, []);
   const setField = (k: keyof T, v: any) => setForm(prev => ({ ...prev, [k]: v }));
   const save = async () => {
+    if (spSave) { await spSave(form); setEditing(null); load(); return; }
     if (form.id) await apiFetch.put(`/${endpoint}/${form.id}`, form);
     else await apiFetch.post(`/${endpoint}/`, form);
     setEditing(null); load();
   };
   const del = async (responsavel: string, motivo: string) => {
     if (!delTarget?.id) return;
+    if (spDelete) { await spDelete(delTarget.id); setDelTarget(null); load(); return; }
     const resumo = Object.entries(delTarget as any).filter(([k]) => !["id","criado_em","atualizado_em"].includes(k)).map(([k,v]) => `${k}: ${v}`).join(" | ").slice(0, 300);
     await logAndDelete(endpoint, delTarget.id, resumo, responsavel, motivo);
     setDelTarget(null); load();
@@ -1817,8 +1826,12 @@ export default function App() {
 
   useEffect(() => {
     reloadDrafts();
-    setProjetos(STATIC_PROJETOS_RAW as Projeto[]);
-    initMsal().then(() => setSpAccount(getSpAccount())).catch(() => {});
+    setProjetos(STATIC_PROJETOS_RAW as Projeto[]); // fallback estático
+    initMsal().then(() => {
+      setSpAccount(getSpAccount());
+      // Carrega projetos do SharePoint se estiver logado
+      listProjetosFromSP().then(data => { if (data.length > 0) setProjetos(data); }).catch(() => {});
+    }).catch(() => {});
   }, []);
 
   const tabs: { key: Tab; label: string }[] = [
@@ -1972,7 +1985,11 @@ export default function App() {
           ))}
         </>)} />}
 
-      {tab === "projetos" && <CRUDPage<Projeto> title="Projetos / WO" icon="🏗" endpoint="projetos" staticData={STATIC_PROJETOS_RAW as Projeto[]}
+      {tab === "projetos" && <CRUDPage<Projeto> title="Projetos / WO" icon="🏗" endpoint="projetos"
+        staticData={STATIC_PROJETOS_RAW as Projeto[]}
+        spLoad={listProjetosFromSP}
+        spSave={async (f) => { if (f.id) await updateProjeto(f.id, f); else await createProjeto(f); }}
+        spDelete={deleteProjeto}
         columns={[
           { key: "wo", label: "WO", render: v => <strong>#{v}</strong> },
           { key: "cliente", label: "Cliente" },
