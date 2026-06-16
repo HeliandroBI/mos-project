@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { initMsal, getSpAccount, loginSharePoint, logoutSharePoint, postWOToSharePoint, getListItems, getToken, listWOs, createWO, updateWO, deleteWO, getListFields, listProjects, createProject, updateProject, deleteProject, createConta, updateConta, deleteConta, ID_COUNTRY_BR, type WOItem, type ProjectItem } from "./services/sharepoint";
 import { MOCK_CONTAS, MOCK_IMPOSTOS, MOCK_CLIENTES, MOCK_PROJETOS, MOCK_DRAFTS, MOCK_FERIADOS } from "./mockData";
 import { STATIC_DRAFTS, STATIC_CLIENTES_PRAZOS } from "./staticData";
+import STATIC_PROJETOS_RAW from "./staticProjetos.json";
 
 const DEMO = import.meta.env.VITE_DEMO === "true";
 const API = (import.meta.env.VITE_API_URL || "http://localhost:8000") + "/api";
@@ -1709,7 +1710,7 @@ export default function App() {
 
   useEffect(() => {
     reloadDrafts();
-    apiFetch.get("/projetos/").then(d => setProjetos(Array.isArray(d) ? d : [])).catch(() => {});
+    setProjetos(STATIC_PROJETOS_RAW as Projeto[]);
     initMsal().then(() => setSpAccount(getSpAccount())).catch(() => {});
   }, []);
 
@@ -1864,7 +1865,7 @@ export default function App() {
           ))}
         </>)} />}
 
-      {tab === "projetos" && <CRUDPage<Projeto> title="Projetos / WO" icon="🏗" endpoint="projetos"
+      {tab === "projetos" && <CRUDPage<Projeto> title="Projetos / WO" icon="🏗" endpoint="projetos" staticData={STATIC_PROJETOS_RAW as Projeto[]}
         columns={[
           { key: "wo", label: "WO", render: v => <strong>#{v}</strong> },
           { key: "cliente", label: "Cliente" },
