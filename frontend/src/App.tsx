@@ -430,21 +430,15 @@ function proximoDiaUtil(d: Date): Date {
 }
 
 function calcPrazos(f: ContaReceber): Partial<ContaReceber> {
+  // Vencimento é sempre manual (confirmado: na planilha real são datas digitadas, não fórmula) —
+  // aqui só calculamos Prev.Pag (a partir do Vencimento manual) e Prev.Fat.
   const prazo = (STATIC_CLIENTES_PRAZOS as ClientePrazo[]).find(p => p.cliente === f.cliente);
   const out: Partial<ContaReceber> = {};
 
-  // Vencimento = Data Doc + soma dos prazos do cliente (dias corridos), no próximo dia útil
-  if (f.data_doc && prazo) {
-    const dd = parseDataInput(f.data_doc)!;
-    const total = prazo.rec_doc + prazo.medicao + prazo.resp_cli + prazo.vencimento + prazo.cambio;
-    out.vencimento = toISODate(proximoDiaUtil(addDias(dd, total)));
-  }
-
   // Prev.Pag = dia-limite de pagamento do cliente no mês do Vencimento (ou no seguinte, se já passou), próximo dia útil
-  const vencimentoBase = out.vencimento ?? f.vencimento;
-  if (vencimentoBase) {
+  if (f.vencimento) {
     const dl = prazo ? prazo.data_limite : 30;
-    const venc = parseDataInput(vencimentoBase)!;
+    const venc = parseDataInput(f.vencimento)!;
     let prev = new Date(venc.getFullYear(), venc.getMonth(), Math.min(dl, 28), 12);
     if (prev < venc) {
       const m = (venc.getMonth() + 1) % 12;
@@ -587,7 +581,7 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraft
     if (["vl_bruto", "doc", "faturado_por", "escopo", "data_inicio", "data_fim", "tipo_servico"].includes(k as string)) {
       next = { ...next, ...calcImpostos(next, impostos) };
     }
-    if (["cliente", "data_doc", "data_fim", "vencimento"].includes(k as string)) {
+    if (["cliente", "data_fim", "vencimento"].includes(k as string)) {
       next = { ...next, ...calcPrazos(next) };
     }
     setForm(next);
@@ -775,7 +769,8 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraft
             <div style={{ gridColumn: "1/-1", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 8, padding: "8px 12px", fontSize: 11, color: "#1e40af", lineHeight: 1.6 }}>
               <strong>Cálculos automáticos:</strong> &nbsp;
               <span>• <b>VL.Bruto</b>: WO + Escopo + Data Início/Fim → busca valores do projeto</span> &nbsp;|&nbsp;
-              <span>• <b>Vencimento</b> e <b>Prev.Pag</b>: Data Doc + Cliente (cadastrado em Clientes/Prazos)</span> &nbsp;|&nbsp;
+              <span>• <b>Vencimento</b>: sempre manual</span> &nbsp;|&nbsp;
+              <span>• <b>Prev.Pag</b>: Vencimento + Cliente (cadastrado em Clientes/Prazos)</span> &nbsp;|&nbsp;
               <span>• <b>Prev.Fat</b>: Data Fim + prazo "Rec.Doc" do cliente</span>
             </div>
 
