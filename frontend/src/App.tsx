@@ -258,16 +258,20 @@ function calcImpostos(f: ContaReceber, impostos: Imposto[]): Partial<ContaRecebe
   //  - ISS só é retido na fonte quando Faturado Por = "Macaé" (Rio nunca retém ISS na fonte)
   //  - ISS a pagar usa sempre a alíquota cheia (5%), independente da cidade, menos o que
   //    já foi retido — por isso o valor final acaba variando por cidade
+  //  - INSS 11% retido incide só quando Tipo de Serviço = "CONTRATO" exatamente
+  //    ("CONTRATO S/ INSS" e vazio não geram INSS)
   const vl = f.vl_bruto || 0;
   const isNFSe = f.doc === "NFSe";
   const isDANFE = ["DANFE", "DANFE(ex)"].includes(f.doc || "");
   const isMacae = f.faturado_por === "Macaé";
+  const isContrato = f.tipo_servico === "CONTRATO";
   const cofins_3   = isNFSe ? vl * getAliquota(impostos, "COFINS", "retido_fonte") : 0;
   const csll_1     = isNFSe ? vl * getAliquota(impostos, "CSLL",   "retido_fonte") : 0;
+  const inss_11    = isNFSe && isContrato ? vl * getAliquota(impostos, "INSS", "retido_fonte") : 0;
   const irpj_15    = isNFSe ? vl * getAliquota(impostos, "IRPJ",   "retido_fonte") : 0;
   const pis_065    = isNFSe ? vl * getAliquota(impostos, "PIS",    "retido_fonte") : 0;
   const iss_retido = isNFSe && isMacae ? vl * getAliquota(impostos, "ISS", "retido_fonte", "Macaé") : 0;
-  const total_retido = cofins_3 + csll_1 + irpj_15 + pis_065 + iss_retido;
+  const total_retido = cofins_3 + csll_1 + inss_11 + irpj_15 + pis_065 + iss_retido;
   const vl_liquido   = vl - total_retido;
 
   // A Pagar (VL.Bruto * alíquota cheia - o que já foi retido na fonte)
@@ -281,7 +285,7 @@ function calcImpostos(f: ContaReceber, impostos: Imposto[]): Partial<ContaRecebe
 
   const r = (x: number) => +x.toFixed(2);
   return {
-    cofins_3: r(cofins_3), csll_1: r(csll_1), irpj_15: r(irpj_15), pis_065: r(pis_065), iss_retido: r(iss_retido),
+    cofins_3: r(cofins_3), csll_1: r(csll_1), inss_11: r(inss_11), irpj_15: r(irpj_15), pis_065: r(pis_065), iss_retido: r(iss_retido),
     total_retido: r(total_retido), vl_liquido: r(vl_liquido),
     cofins_76: r(cofins_76), csll_288: r(csll_288), icms_20: r(icms_20), irpj_48: r(irpj_48), pis_165: r(pis_165),
     iss_pagar: r(iss_pagar), total_a_pagar: r(total_a_pagar),
@@ -343,7 +347,7 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraft
       const newVl = calcVlBruto(updated, projData);
       if (newVl != null) updated.vl_bruto = +newVl.toFixed(2);
     }
-    if (["vl_bruto", "doc", "faturado_por", "escopo", "data_inicio", "data_fim"].includes(k as string)) {
+    if (["vl_bruto", "doc", "faturado_por", "escopo", "data_inicio", "data_fim", "tipo_servico"].includes(k as string)) {
       setForm({ ...updated, ...calcImpostos(updated, impostos) });
     } else {
       setForm(updated);
@@ -480,6 +484,13 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraft
                 <option>Rio</option><option>Macaé</option>
               </select>
             </Field>
+            <Field label="Tipo de Serviço">
+              <select style={S.select} value={form.tipo_servico || ""} onChange={e => handleChange("tipo_servico", e.target.value)}>
+                <option value="">—</option>
+                <option value="CONTRATO">CONTRATO</option>
+                <option value="CONTRATO S/ INSS">CONTRATO S/ INSS</option>
+              </select>
+            </Field>
             <Field label="PO/Contrato"><input style={S.input} value={form.po_contrato || ""} onChange={e => handleChange("po_contrato", e.target.value)} /></Field>
             <Field label="Data Início"><input type="date" style={S.input} value={form.data_inicio || ""} onChange={e => handleChange("data_inicio", e.target.value)} /></Field>
             <Field label="Data Fim"><input type="date" style={S.input} value={form.data_fim || ""} onChange={e => handleChange("data_fim", e.target.value)} /></Field>
@@ -502,8 +513,8 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraft
             {form.vl_bruto ? (
               <div style={{ gridColumn: "1/-1", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 6, padding: 10 }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>RETIDOS NA FONTE</div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 8 }}>
-                  {[["COFINS 3%", form.cofins_3], ["CSLL 1%", form.csll_1], ["IRPJ 1.5%", form.irpj_15], ["PIS 0.65%", form.pis_065], ["ISS Ret.", form.iss_retido]].map(([l, v]) => (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 8 }}>
+                  {[["COFINS 3%", form.cofins_3], ["CSLL 1%", form.csll_1], ["INSS 11%", form.inss_11], ["IRPJ 1.5%", form.irpj_15], ["PIS 0.65%", form.pis_065], ["ISS Ret.", form.iss_retido]].map(([l, v]) => (
                     <div key={l as string} style={{ textAlign: "center" as const }}>
                       <div style={{ fontSize: 9, color: "#64748b" }}>{l}</div>
                       <div style={{ fontWeight: 700, color: "#dc2626" }}>{fmt.brl(v as number)}</div>
@@ -888,7 +899,7 @@ function ContasPage({ drafts, projetos, impostos, onDraftsChanged, spAccount }: 
                   isExp && <tr key={`exp-${row.id}`}>
                     <td colSpan={20} style={{ background: N.bg, padding: "10px 16px" }}>
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(8,1fr)", gap: 6, fontSize: 11 }}>
-                        {[["COFINS 3%", row.cofins_3], ["CSLL 1%", row.csll_1], ["IRPJ 1.5%", row.irpj_15], ["PIS 0.65%", row.pis_065], ["ISS Ret.", row.iss_retido], ["COFINS 7.6%", row.cofins_76], ["CSLL 2.88%", row.csll_288], ["ICMS 20%", row.icms_20], ["IRPJ 4.8%", row.irpj_48], ["PIS 1.65%", row.pis_165], ["ISS a Pagar", row.iss_pagar], ["Total a Pagar", row.total_a_pagar], ["PO/Contrato", row.po_contrato], ["Prev. Fat.", fmt.date(row.prev_fat)], ["Data Pgto.", fmt.date(row.data_pgto)], ["Obs", row.obs]].map(([l, v]) => (
+                        {[["COFINS 3%", row.cofins_3], ["CSLL 1%", row.csll_1], ["INSS 11%", row.inss_11], ["IRPJ 1.5%", row.irpj_15], ["PIS 0.65%", row.pis_065], ["ISS Ret.", row.iss_retido], ["COFINS 7.6%", row.cofins_76], ["CSLL 2.88%", row.csll_288], ["ICMS 20%", row.icms_20], ["IRPJ 4.8%", row.irpj_48], ["PIS 1.65%", row.pis_165], ["ISS a Pagar", row.iss_pagar], ["Total a Pagar", row.total_a_pagar], ["PO/Contrato", row.po_contrato], ["Prev. Fat.", fmt.date(row.prev_fat)], ["Data Pgto.", fmt.date(row.data_pgto)], ["Obs", row.obs]].map(([l, v]) => (
                           <div key={l as string} style={{ background: N.card, borderRadius: 8, padding: "4px 8px", boxShadow: `2px 2px 5px ${N.shadowD}, -1px -1px 3px ${N.shadowL}` }}>
                             <div style={{ color: N.muted, fontSize: 9, fontWeight: 700 }}>{l}</div>
                             <div style={{ fontWeight: 600, color: N.text }}>{typeof v === "number" ? fmt.brl(v) : (v || "-")}</div>
