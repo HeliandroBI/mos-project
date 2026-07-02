@@ -206,6 +206,7 @@ function FilterHeader({ label, width, sortDir, onSort, active, onClear, children
       </div>
       {open && children && (
         <div
+          onMouseDown={e => e.stopPropagation()}
           onClick={e => e.stopPropagation()}
           style={{ position: "absolute", top: "100%", left: 0, zIndex: 30, background: N.card, boxShadow: `6px 6px 16px ${N.shadowD}, -3px -3px 10px ${N.shadowL}`, borderRadius: 10, padding: 10, marginTop: 4, minWidth: 200, textTransform: "none" as const, fontWeight: 400 }}
         >
@@ -242,7 +243,7 @@ function ExcelFilter({ options, selected, onChange }: {
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 10 }}>
         <span style={{ cursor: "pointer", color: N.accent, fontWeight: 600 }} onClick={() => onChange(null)}>Selecionar todos</span>
-        <span style={{ cursor: "pointer", color: N.muted, fontWeight: 600 }} onClick={() => onChange(new Set())}>Limpar</span>
+        <span style={{ cursor: "pointer", color: N.muted, fontWeight: 600 }} onClick={() => onChange(new Set())}>Desmarcar todos</span>
       </div>
       <div style={{ maxHeight: 190, overflowY: "auto" as const, display: "flex", flexDirection: "column" as const, gap: 1, borderTop: `1px solid ${N.bg}`, paddingTop: 4 }}>
         {shown.length === 0 && <span style={{ fontSize: 11, color: N.muted, padding: "4px 2px" }}>Nenhum valor</span>}
