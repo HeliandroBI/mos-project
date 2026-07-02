@@ -463,6 +463,71 @@ function calcPrazos(f: ContaReceber): Partial<ContaReceber> {
   return out;
 }
 
+// ===== CAMPO DE DATA — sempre exibe DD/MM/AAAA, independente do idioma/SO do navegador =====
+// (input nativo type="date" segue o idioma do navegador/SO, não da página — por isso um
+// calendário próprio, igual ao popover de filtro, garante o formato brasileiro sempre)
+const DIAS_SEMANA_ABREV = ["D", "S", "T", "Q", "Q", "S", "S"];
+function DateBR({ value, onChange, placeholder = "dd/mm/aaaa", style }: {
+  value?: string; onChange: (v?: string) => void; placeholder?: string; style?: React.CSSProperties;
+}) {
+  const [open, setOpen] = useState(false);
+  const [viewY, setViewY] = useState(() => (value ? parseDataInput(value)! : new Date()).getFullYear());
+  const [viewM, setViewM] = useState(() => (value ? parseDataInput(value)! : new Date()).getMonth());
+
+  useEffect(() => {
+    if (!open) return;
+    const d = value ? parseDataInput(value)! : new Date();
+    setViewY(d.getFullYear()); setViewM(d.getMonth());
+    const close = () => setOpen(false);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+
+  const daysInMonth = new Date(viewY, viewM + 1, 0).getDate();
+  const firstWeekday = new Date(viewY, viewM, 1).getDay();
+  const cells: (number | null)[] = [...Array(firstWeekday).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
+  const isoFor = (day: number) => `${viewY}-${String(viewM + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+
+  const prevMonth = () => setViewM(m => { if (m === 0) { setViewY(y => y - 1); return 11; } return m - 1; });
+  const nextMonth = () => setViewM(m => { if (m === 11) { setViewY(y => y + 1); return 0; } return m + 1; });
+
+  return (
+    <div style={{ position: "relative" as const, ...style }}>
+      <div onClick={() => setOpen(o => !o)}
+        style={{ ...S.input, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ color: value ? N.text : N.muted }}>{value ? fmt.date(value) : placeholder}</span>
+        <span style={{ fontSize: 11 }}>📅</span>
+      </div>
+      {open && (
+        <div onMouseDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}
+          style={{ position: "absolute", top: "100%", left: 0, zIndex: 40, background: N.card, boxShadow: `6px 6px 16px ${N.shadowD}, -3px -3px 10px ${N.shadowL}`, borderRadius: 10, padding: 10, marginTop: 4, width: 220, textTransform: "none" as const, fontWeight: 400 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+            <button onClick={prevMonth} style={{ ...btnSm(N.muted), padding: "2px 8px" }}>‹</button>
+            <span style={{ fontWeight: 700, fontSize: 12 }}>{MESES_PT[viewM + 1]} {viewY}</span>
+            <button onClick={nextMonth} style={{ ...btnSm(N.muted), padding: "2px 8px" }}>›</button>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 2, fontSize: 10, color: N.muted, marginBottom: 2, textAlign: "center" as const }}>
+            {DIAS_SEMANA_ABREV.map((d, i) => <div key={i}>{d}</div>)}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 2 }}>
+            {cells.map((day, i) => day == null
+              ? <div key={i} />
+              : <button key={i} onClick={() => { onChange(isoFor(day)); setOpen(false); }}
+                  style={{ border: "none", borderRadius: 6, padding: "4px 0", fontSize: 11, cursor: "pointer",
+                    background: value === isoFor(day) ? N.accent : "transparent", color: value === isoFor(day) ? "#fff" : N.text }}>
+                  {day}
+                </button>)}
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
+            <span style={{ fontSize: 10, color: N.accent, cursor: "pointer", fontWeight: 600 }} onClick={() => { onChange(toISODate(new Date())); setOpen(false); }}>Hoje</span>
+            <span style={{ fontSize: 10, color: N.muted, cursor: "pointer", fontWeight: 600 }} onClick={() => { onChange(undefined); setOpen(false); }}>Limpar</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ===== CONTA FORM =====
 function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraftsChanged, spAccount }: { conta: ContaReceber; onSave: (c: ContaReceber) => void; onClose: () => void; drafts: Draft[]; projetos: Projeto[]; impostos: Imposto[]; onDraftsChanged?: () => void; spAccount?: { name?: string; username?: string } | null }) {
   // Para nova conta, draft_id=0 significa "criar nova draft ao salvar"
@@ -637,7 +702,7 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraft
                 {drafts.map(d => <option key={d.id} value={d.id}>#{d.codigo}{d.data_draft ? ` — ${fmt.date(d.data_draft)}` : ""}</option>)}
               </select>
             </Field>
-            <Field label="Data Draft"><input type="date" style={S.input} value={form.data_draft || ""} onChange={e => handleChange("data_draft", e.target.value)} /></Field>
+            <Field label="Data Draft"><DateBR value={form.data_draft} onChange={v => handleChange("data_draft", v || "")} /></Field>
             <Field label="Doc">
               <select style={S.select} value={form.doc || ""} onChange={e => handleChange("doc", e.target.value)}>
                 <option value="">—</option>
@@ -645,7 +710,7 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraft
               </select>
             </Field>
             <Field label="Nº Doc"><input style={S.input} value={form.num_doc || ""} onChange={e => handleChange("num_doc", e.target.value)} /></Field>
-            <Field label="Data Doc"><input type="date" style={S.input} value={form.data_doc || ""} onChange={e => handleChange("data_doc", e.target.value)} /></Field>
+            <Field label="Data Doc"><DateBR value={form.data_doc} onChange={v => handleChange("data_doc", v || "")} /></Field>
             <Field label="Escopo">
               <select style={S.select} value={form.escopo || ""} onChange={e => handleChange("escopo", e.target.value)}>
                 <option value="">—</option>
@@ -666,8 +731,8 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraft
               </select>
             </Field>
             <Field label="PO/Contrato"><input style={S.input} value={form.po_contrato || ""} onChange={e => handleChange("po_contrato", e.target.value)} /></Field>
-            <Field label="Data Início"><input type="date" style={S.input} value={form.data_inicio || ""} onChange={e => handleChange("data_inicio", e.target.value)} /></Field>
-            <Field label="Data Fim"><input type="date" style={S.input} value={form.data_fim || ""} onChange={e => handleChange("data_fim", e.target.value)} /></Field>
+            <Field label="Data Início"><DateBR value={form.data_inicio} onChange={v => handleChange("data_inicio", v || "")} /></Field>
+            <Field label="Data Fim"><DateBR value={form.data_fim} onChange={v => handleChange("data_fim", v || "")} /></Field>
 
             <Section title="Valores e Impostos" />
             <div style={{ gridColumn: "1/-1" }}>
@@ -720,10 +785,10 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraft
                 {["Programado", "Em andamento", "Aguardando Pagamento", "Aguardando Resposta do Cliente", "Aguardando Documentação", "Aguardando PO", "Enviar NF", "PAGO", "Previsão", "Free Of Charge"].map(s => <option key={s}>{s}</option>)}
               </select>
             </Field>
-            <Field label="Vencimento"><input type="date" style={S.input} value={form.vencimento || ""} onChange={e => handleChange("vencimento", e.target.value)} /></Field>
-            <Field label="Prev. Fat."><input type="date" style={S.input} value={form.prev_fat || ""} onChange={e => handleChange("prev_fat", e.target.value)} /></Field>
-            <Field label="Prev. Pag."><input type="date" style={S.input} value={form.prev_pag || ""} onChange={e => handleChange("prev_pag", e.target.value)} /></Field>
-            <Field label="Data Pagto."><input type="date" style={S.input} value={form.data_pgto || ""} onChange={e => handleChange("data_pgto", e.target.value)} /></Field>
+            <Field label="Vencimento"><DateBR value={form.vencimento} onChange={v => handleChange("vencimento", v || "")} /></Field>
+            <Field label="Prev. Fat."><DateBR value={form.prev_fat} onChange={v => handleChange("prev_fat", v || "")} /></Field>
+            <Field label="Prev. Pag."><DateBR value={form.prev_pag} onChange={v => handleChange("prev_pag", v || "")} /></Field>
+            <Field label="Data Pagto."><DateBR value={form.data_pgto} onChange={v => handleChange("data_pgto", v || "")} /></Field>
             <div style={{ gridColumn: "1/-1" }}>
               <label style={S.label}>Observações</label>
               <textarea style={{ ...S.input, minHeight: 60 }} value={form.obs || ""} onChange={e => handleChange("obs", e.target.value)} />
@@ -940,7 +1005,7 @@ function ContasPage({ drafts, projetos, impostos, onDraftsChanged, spAccount }: 
                       ))}
                     </div>
                     {(!filters._dataModo || filters._dataModo === "Exata") && (
-                      <input type="date" style={{ ...S.input, padding: "3px 6px", fontSize: 12, width: 130 }} value={filters.data_doc || ""} onChange={e => setFilters({ ...filters, data_doc: e.target.value })} />
+                      <DateBR style={{ width: 130, fontSize: 12 }} value={filters.data_doc} onChange={v => setFilters({ ...filters, data_doc: v })} />
                     )}
                     {filters._dataModo === "Mês" && (
                       <input type="month" style={{ ...S.input, padding: "3px 6px", fontSize: 12, width: 130 }} value={filters._mesSel || ""} onChange={e => {
@@ -953,8 +1018,8 @@ function ContasPage({ drafts, projetos, impostos, onDraftsChanged, spAccount }: 
                     )}
                     {filters._dataModo === "Período" && (
                       <div style={{ display: "flex", gap: 2, alignItems: "center" }}>
-                        <input type="date" style={{ ...S.input, padding: "3px 4px", fontSize: 11, width: 100 }} value={filters.data_doc_de || ""} onChange={e => setFilters({ ...filters, data_doc_de: e.target.value })} />
-                        <input type="date" style={{ ...S.input, padding: "3px 4px", fontSize: 11, width: 100 }} value={filters.data_doc_ate || ""} onChange={e => setFilters({ ...filters, data_doc_ate: e.target.value })} />
+                        <DateBR style={{ width: 100, fontSize: 11 }} value={filters.data_doc_de} onChange={v => setFilters({ ...filters, data_doc_de: v })} />
+                        <DateBR style={{ width: 100, fontSize: 11 }} value={filters.data_doc_ate} onChange={v => setFilters({ ...filters, data_doc_ate: v })} />
                       </div>
                     )}
                   </div>
@@ -2065,8 +2130,7 @@ function ProducaoPage() {
   );
   const dtInput = (label: string, k: keyof ProducaoItem) => (
     <Field label={label}>
-      <input type="date" style={S.input} value={(form as any)[k] ?? ""}
-        onChange={e => hf(k, e.target.value || undefined)} />
+      <DateBR value={(form as any)[k]} onChange={v => hf(k, v)} />
     </Field>
   );
   const txtInput = (label: string, k: keyof ProducaoItem, ph?: string) => (
@@ -2523,7 +2587,7 @@ export default function App() {
           <Field label="Alíquota (ex: 0.03)"><input type="number" step="0.0001" style={S.input} value={f.aliquota} onChange={e => set("aliquota", +e.target.value)} /></Field>
           <Field label="Documento"><select style={S.select} value={f.tipo_documento || ""} onChange={e => set("tipo_documento", e.target.value)}><option value="">Todos</option>{["NFSe", "DANFE", "FAT. LOC."].map(d => <option key={d}>{d}</option>)}</select></Field>
           <Field label="Cidade"><select style={S.select} value={f.cidade || ""} onChange={e => set("cidade", e.target.value)}><option value="">—</option><option>Rio</option><option>Macaé</option></select></Field>
-          <Field label="Vigência Início"><input type="date" style={S.input} value={f.vigencia_inicio} onChange={e => set("vigencia_inicio", e.target.value)} /></Field>
+          <Field label="Vigência Início"><DateBR value={f.vigencia_inicio} onChange={v => set("vigencia_inicio", v || "")} /></Field>
         </>)} />}
 
       {tab === "clientes" && <CRUDPage<ClientePrazo> title="Prazos por Cliente" icon="👥" endpoint="clientes-prazos" staticData={STATIC_CLIENTES_PRAZOS as ClientePrazo[]}
@@ -2603,7 +2667,7 @@ export default function App() {
         columns={[{ key: "data", label: "Data", render: v => fmt.date(v) }, { key: "nome", label: "Nome" }, { key: "tipo", label: "Tipo", render: v => <Badge text={v} /> }, { key: "estado", label: "Estado" }, { key: "municipio", label: "Município" }, { key: "pais", label: "País" }]}
         emptyItem={{ data: "", nome: "", tipo: "nacional", pais: "BR" }}
         renderForm={(f, set) => (<>
-          <Field label="Data"><input type="date" style={S.input} value={f.data} onChange={e => set("data", e.target.value)} /></Field>
+          <Field label="Data"><DateBR value={f.data} onChange={v => set("data", v || "")} /></Field>
           <Field label="Nome"><input style={S.input} value={f.nome} onChange={e => set("nome", e.target.value)} /></Field>
           <Field label="Tipo"><select style={S.select} value={f.tipo} onChange={e => set("tipo", e.target.value)}><option value="nacional">Nacional</option><option value="estadual">Estadual</option><option value="municipal">Municipal</option></select></Field>
           <Field label="País"><input style={S.input} value={f.pais} onChange={e => set("pais", e.target.value)} /></Field>
