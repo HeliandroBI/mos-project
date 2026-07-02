@@ -191,22 +191,77 @@ function FilterHeader({ label, width, sortDir, onSort, active, onClear, children
         {children && (
           <span
             onClick={() => setOpen(o => !o)}
-            style={{ cursor: "pointer", fontSize: 12, color: active ? N.accent : N.muted, marginLeft: "auto" }}
             title="Filtrar"
-          >▽</span>
+            style={{
+              cursor: "pointer", marginLeft: "auto", display: "inline-flex", alignItems: "center", justifyContent: "center",
+              width: 20, height: 20, borderRadius: 5,
+              background: active ? N.accent + "22" : "transparent",
+            }}
+          >
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M1 1.5H15L9.5 8.2V13.5L6.5 15V8.2L1 1.5Z" fill={active ? N.accent : N.muted} stroke={active ? N.accent : N.muted} strokeWidth="0.6" strokeLinejoin="round" />
+            </svg>
+          </span>
         )}
       </div>
       {open && children && (
         <div
           onClick={e => e.stopPropagation()}
-          style={{ position: "absolute", top: "100%", left: 0, zIndex: 30, background: N.card, boxShadow: `4px 4px 12px ${N.shadowD}, -2px -2px 8px ${N.shadowL}`, borderRadius: 8, padding: 8, marginTop: 4, minWidth: 150, textTransform: "none" as const, fontWeight: 400 }}
+          style={{ position: "absolute", top: "100%", left: 0, zIndex: 30, background: N.card, boxShadow: `6px 6px 16px ${N.shadowD}, -3px -3px 10px ${N.shadowL}`, borderRadius: 10, padding: 10, marginTop: 4, minWidth: 200, textTransform: "none" as const, fontWeight: 400 }}
         >
           {children}
-          {active && <button style={{ ...btnSm("#64748b"), marginTop: 6, width: "100%" }} onClick={() => { onClear?.(); setOpen(false); }}>✕ Limpar</button>}
+          {active && <button style={{ ...btnSm("#64748b"), marginTop: 8, width: "100%", justifyContent: "center" }} onClick={() => { onClear?.(); setOpen(false); }}>✕ Limpar filtro</button>}
         </div>
       )}
     </th>
   );
+}
+
+// ===== FILTRO ESTILO EXCEL: busca + checkboxes de valores únicos =====
+function ExcelFilter({ options, selected, onChange }: {
+  /** valores únicos já formatados para exibição (ordenados) */
+  options: string[];
+  /** null = todos selecionados (sem filtro ativo); Set vazio = nada selecionado */
+  selected: Set<string> | null;
+  onChange: (s: Set<string> | null) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const shown = search ? options.filter(o => o.toLowerCase().includes(search.toLowerCase())) : options;
+  const isChecked = (o: string) => selected === null || selected.has(o);
+  const toggle = (o: string) => {
+    const base = new Set(selected === null ? options : selected);
+    if (base.has(o)) base.delete(o); else base.add(o);
+    onChange(base.size >= options.length ? null : base);
+  };
+  return (
+    <div style={{ width: 210 }}>
+      <div style={{ position: "relative" as const, marginBottom: 6 }}>
+        <span style={{ position: "absolute" as const, left: 7, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: N.muted }}>🔍</span>
+        <input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar..."
+          style={{ ...S.input, padding: "5px 8px 5px 22px", fontSize: 12 }} />
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 10 }}>
+        <span style={{ cursor: "pointer", color: N.accent, fontWeight: 600 }} onClick={() => onChange(null)}>Selecionar todos</span>
+        <span style={{ cursor: "pointer", color: N.muted, fontWeight: 600 }} onClick={() => onChange(new Set())}>Limpar</span>
+      </div>
+      <div style={{ maxHeight: 190, overflowY: "auto" as const, display: "flex", flexDirection: "column" as const, gap: 1, borderTop: `1px solid ${N.bg}`, paddingTop: 4 }}>
+        {shown.length === 0 && <span style={{ fontSize: 11, color: N.muted, padding: "4px 2px" }}>Nenhum valor</span>}
+        {shown.map(o => (
+          <label key={o} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, cursor: "pointer", padding: "2px 2px", borderRadius: 4 }}>
+            <input type="checkbox" checked={isChecked(o)} onChange={() => toggle(o)} style={{ margin: 0 }} />
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>{o || "(vazio)"}</span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Deriva a lista de valores únicos (ordenados) de uma coluna, a partir dos dados brutos
+function uniqueValues(rows: any[], getVal: (r: any) => any): string[] {
+  const set = new Set<string>();
+  for (const r of rows) set.add(String(getVal(r) ?? ""));
+  return [...set].sort((a, b) => a.localeCompare(b, "pt-BR"));
 }
 
 // Comparador genérico p/ ordenação (número > data ISO > texto)
@@ -654,12 +709,6 @@ function ContasPage({ drafts, projetos, impostos, onDraftsChanged, spAccount }: 
   const [editing, setEditing] = useState<ContaReceber | null>(null);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
-  // Dimensões extraídas da lista carregada (sem requisição extra)
-  const [dimClientes, setDimClientes] = useState<{id: number; label: string}[]>([]);
-  const [dimPlataformas, setDimPlataformas] = useState<{id: number; label: string}[]>([]);
-  const [dimStatus, setDimStatus] = useState<string[]>([]);
-  const [dimEscopo, setDimEscopo] = useState<string[]>([]);
-  const [dimFatPor, setDimFatPor] = useState<string[]>([]);
   // Cache em memória — evita re-fetch ao filtrar
   const allDataRef = useRef<ContaReceber[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -687,26 +736,28 @@ function ContasPage({ drafts, projetos, impostos, onDraftsChanged, spAccount }: 
     } catch (e: any) { alert(`Erro ao duplicar: ${e.message}`); }
   };
 
+  // Colunas com filtro em lista de valores (estilo Excel) — cada uma vira um Set<string> em `filters[key]`
+  const COL_GETVAL: Record<string, (x: ContaReceber) => any> = {
+    wo: (x: any) => x.wo, draft_codigo: (x: any) => x.draft_codigo || x.draft_id,
+    cliente: (x: any) => x.cliente, plataforma: (x: any) => x.plataforma,
+    doc: (x: any) => x.doc, num_doc: (x: any) => x.num_doc,
+    escopo: (x: any) => x.escopo, faturado_por: (x: any) => x.faturado_por,
+    vl_bruto: (x: any) => fmt.brl(x.vl_bruto), total_retido: (x: any) => fmt.brl(x.total_retido),
+    vl_liquido: (x: any) => fmt.brl(x.vl_liquido),
+    vencimento: (x: any) => fmt.date(x.vencimento), prev_pag: (x: any) => fmt.date(x.prev_pag),
+    status: (x: any) => x.status,
+  };
+
   // Aplica filtros sobre os dados em memória — sem requisição ao SP
   const applyFilters = useCallback((data: ContaReceber[], f: any, s: typeof sort) => {
-    let r = data;
-    if (f.wo)            r = r.filter((x: any) => String(x.wo ?? '').includes(f.wo));
-    if (f.cliente_id)    r = r.filter((x: any) => Number(x.cliente_id) === Number(f.cliente_id));
-    if (f.plataforma_id) r = r.filter((x: any) => Number(x.plataforma_id) === Number(f.plataforma_id));
-    if (f.draft_codigo)  r = r.filter((x: any) => String(x.draft_codigo ?? '') === f.draft_codigo);
-    if (f.doc)           r = r.filter((x: any) => x.doc === f.doc);
-    if (f.num_doc)       r = r.filter((x: any) => String(x.num_doc ?? '').includes(f.num_doc));
-    if (f.status)        r = r.filter((x: any) => x.status === f.status);
-    if (f.escopo)        r = r.filter((x: any) => x.escopo === f.escopo);
-    if (f.faturado_por)  r = r.filter((x: any) => x.faturado_por === f.faturado_por);
+    let r = data.filter(row => Object.keys(COL_GETVAL).every(k => {
+      const sel: Set<string> | null | undefined = f[k];
+      if (!sel) return true;
+      return sel.has(String(COL_GETVAL[k](row) ?? ''));
+    }));
     if (f.data_doc)      r = r.filter((x: any) => (x.data_doc ?? '') === f.data_doc);
     if (f.data_doc_de)   r = r.filter((x: any) => (x.data_doc ?? '') >= f.data_doc_de);
     if (f.data_doc_ate)  r = r.filter((x: any) => (x.data_doc ?? '') <= f.data_doc_ate);
-    if (f.vl_bruto)      r = r.filter((x: any) => fmt.brl(x.vl_bruto).includes(f.vl_bruto));
-    if (f.total_retido)  r = r.filter((x: any) => fmt.brl(x.total_retido).includes(f.total_retido));
-    if (f.vl_liquido)    r = r.filter((x: any) => fmt.brl(x.vl_liquido).includes(f.vl_liquido));
-    if (f.vencimento)    r = r.filter((x: any) => fmt.date(x.vencimento).includes(f.vencimento));
-    if (f.prev_pag)      r = r.filter((x: any) => fmt.date(x.prev_pag).includes(f.prev_pag));
     if (s) { r = [...r].sort((a: any, b: any) => genericCompare(a[s.key], b[s.key]) * (s.dir === "asc" ? 1 : -1)); }
     setItems(r);
     setTotal({ total: r.length, total_bruto: r.reduce((s, x) => s + (x.vl_bruto || 0), 0), total_liquido: r.reduce((s, x) => s + (x.vl_liquido || 0), 0) });
@@ -719,13 +770,6 @@ function ContasPage({ drafts, projetos, impostos, onDraftsChanged, spAccount }: 
     try {
       const data: ContaReceber[] = await getListItems('fContasReceber');
       allDataRef.current = data;
-      // Popula dimensões uma única vez
-      const uniqBy = <T,>(arr: T[], key: (x: T) => any) => { const seen = new Set(); return arr.filter(x => { const k = key(x); return seen.has(k) ? false : seen.add(k); }); };
-      setDimClientes(uniqBy(data.filter((x: any) => x.cliente && x.cliente_id), (x: any) => x.cliente_id).map((x: any) => ({ id: Number(x.cliente_id), label: x.cliente })).sort((a,b) => a.label.localeCompare(b.label)));
-      setDimPlataformas(uniqBy(data.filter((x: any) => x.plataforma && x.plataforma_id), (x: any) => x.plataforma_id).map((x: any) => ({ id: Number(x.plataforma_id), label: x.plataforma })).sort((a,b) => a.label.localeCompare(b.label)));
-      setDimStatus([...new Set(data.map((x: any) => x.status).filter(Boolean))].sort());
-      setDimEscopo([...new Set(data.map((x: any) => x.escopo).filter(Boolean))].sort());
-      setDimFatPor([...new Set(data.map((x: any) => x.faturado_por).filter(Boolean))].sort());
       applyFilters(data, filters, sort);
     } catch (e: any) { console.error(e); setLoadError(String(e?.message || e)); }
     finally { setLoading(false); }
@@ -815,33 +859,15 @@ function ContasPage({ drafts, projetos, impostos, onDraftsChanged, spAccount }: 
               <tr>
                 <th style={{ ...S.th, width: 28 }}></th>
                 <th style={{ ...S.th, width: 90 }}>Ações</th>
-                <FilterHeader label="WO" sortDir={sort?.key==="wo"?sort.dir:null} onSort={() => toggleSort("wo")} active={!!filters.wo} onClear={() => setFilters({ ...filters, wo: "" })}>
-                  <input autoFocus style={{ ...S.input, padding: "3px 6px", fontSize: 12, width: 90 }} value={filters.wo || ""} onChange={e => setFilters({ ...filters, wo: e.target.value })} />
-                </FilterHeader>
-                <FilterHeader label="Draft" sortDir={sort?.key==="draft_codigo"?sort.dir:null} onSort={() => toggleSort("draft_codigo")} active={!!filters.draft_codigo} onClear={() => setFilters({ ...filters, draft_codigo: "" })}>
-                  <input type="number" autoFocus style={{ ...S.input, padding: "3px 6px", fontSize: 12, width: 90 }} value={filters.draft_codigo || ""} onChange={e => setFilters({ ...filters, draft_codigo: e.target.value })} />
-                </FilterHeader>
-                <FilterHeader label="Cliente" sortDir={sort?.key==="cliente"?sort.dir:null} onSort={() => toggleSort("cliente")} active={!!filters.cliente_id} onClear={() => setFilters({ ...filters, cliente_id: "" })}>
-                  <select style={{ ...S.select, padding: "3px 4px", fontSize: 12, width: 130 }} value={filters.cliente_id || ""} onChange={e => setFilters({ ...filters, cliente_id: e.target.value })}>
-                    <option value="">Todos</option>
-                    {dimClientes.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                  </select>
-                </FilterHeader>
-                <FilterHeader label="Plataforma" sortDir={sort?.key==="plataforma"?sort.dir:null} onSort={() => toggleSort("plataforma")} active={!!filters.plataforma_id} onClear={() => setFilters({ ...filters, plataforma_id: "" })}>
-                  <select style={{ ...S.select, padding: "3px 4px", fontSize: 12, width: 130 }} value={filters.plataforma_id || ""} onChange={e => setFilters({ ...filters, plataforma_id: e.target.value })}>
-                    <option value="">Todas</option>
-                    {dimPlataformas.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
-                  </select>
-                </FilterHeader>
-                <FilterHeader label="Doc" sortDir={sort?.key==="doc"?sort.dir:null} onSort={() => toggleSort("doc")} active={!!filters.doc} onClear={() => setFilters({ ...filters, doc: "" })}>
-                  <select style={{ ...S.select, padding: "3px 4px", fontSize: 12, width: 110 }} value={filters.doc || ""} onChange={e => setFilters({ ...filters, doc: e.target.value })}>
-                    <option value="">Todos</option>
-                    {["NFSe", "FAT. LOC.", "DANFE", "NFSe(ex)", "Nota de Débito", "DANFE(ex)", "FAT.LOC.(ex)", "Crédito"].map(s => <option key={s}>{s}</option>)}
-                  </select>
-                </FilterHeader>
-                <FilterHeader label="Nº" sortDir={sort?.key==="num_doc"?sort.dir:null} onSort={() => toggleSort("num_doc")} active={!!filters.num_doc} onClear={() => setFilters({ ...filters, num_doc: "" })}>
-                  <input autoFocus style={{ ...S.input, padding: "3px 6px", fontSize: 12, width: 90 }} value={filters.num_doc || ""} onChange={e => setFilters({ ...filters, num_doc: e.target.value })} />
-                </FilterHeader>
+                {(["wo","draft_codigo","cliente","plataforma","doc","num_doc"] as const).map(key => {
+                  const labels: Record<string,string> = { wo:"WO", draft_codigo:"Draft", cliente:"Cliente", plataforma:"Plataforma", doc:"Doc", num_doc:"Nº" };
+                  return (
+                    <FilterHeader key={key} label={labels[key]} sortDir={sort?.key===key?sort.dir:null} onSort={() => toggleSort(key)}
+                      active={!!filters[key]} onClear={() => setFilters({ ...filters, [key]: null })}>
+                      <ExcelFilter options={uniqueValues(allDataRef.current, COL_GETVAL[key])} selected={filters[key] ?? null} onChange={sel => setFilters({ ...filters, [key]: sel })} />
+                    </FilterHeader>
+                  );
+                })}
                 <FilterHeader label="Data" sortDir={sort?.key==="data_doc"?sort.dir:null} onSort={() => toggleSort("data_doc")}
                   active={!!(filters.data_doc || filters.data_doc_de || filters.data_doc_ate)}
                   onClear={() => setFilters({ ...filters, data_doc: undefined, data_doc_de: undefined, data_doc_ate: undefined, _mesSel: undefined })}>
@@ -874,39 +900,15 @@ function ContasPage({ drafts, projetos, impostos, onDraftsChanged, spAccount }: 
                     )}
                   </div>
                 </FilterHeader>
-                <FilterHeader label="Escopo" sortDir={sort?.key==="escopo"?sort.dir:null} onSort={() => toggleSort("escopo")} active={!!filters.escopo} onClear={() => setFilters({ ...filters, escopo: "" })}>
-                  <select style={{ ...S.select, padding: "3px 4px", fontSize: 12, width: 110 }} value={filters.escopo || ""} onChange={e => setFilters({ ...filters, escopo: e.target.value })}>
-                    <option value="">Todos</option>
-                    {dimEscopo.map(s => <option key={s}>{s}</option>)}
-                  </select>
-                </FilterHeader>
-                <FilterHeader label="Fat.Por" sortDir={sort?.key==="faturado_por"?sort.dir:null} onSort={() => toggleSort("faturado_por")} active={!!filters.faturado_por} onClear={() => setFilters({ ...filters, faturado_por: "" })}>
-                  <select style={{ ...S.select, padding: "3px 4px", fontSize: 12, width: 100 }} value={filters.faturado_por || ""} onChange={e => setFilters({ ...filters, faturado_por: e.target.value })}>
-                    <option value="">Todos</option>
-                    {dimFatPor.map(s => <option key={s}>{s}</option>)}
-                  </select>
-                </FilterHeader>
-                <FilterHeader label="Vl. Bruto" sortDir={sort?.key==="vl_bruto"?sort.dir:null} onSort={() => toggleSort("vl_bruto")} active={!!filters.vl_bruto} onClear={() => setFilters({ ...filters, vl_bruto: "" })}>
-                  <input autoFocus style={{ ...S.input, padding: "3px 6px", fontSize: 12, width: 90 }} value={filters.vl_bruto || ""} onChange={e => setFilters({ ...filters, vl_bruto: e.target.value })} />
-                </FilterHeader>
-                <FilterHeader label="Retido" sortDir={sort?.key==="total_retido"?sort.dir:null} onSort={() => toggleSort("total_retido")} active={!!filters.total_retido} onClear={() => setFilters({ ...filters, total_retido: "" })}>
-                  <input autoFocus style={{ ...S.input, padding: "3px 6px", fontSize: 12, width: 90 }} value={filters.total_retido || ""} onChange={e => setFilters({ ...filters, total_retido: e.target.value })} />
-                </FilterHeader>
-                <FilterHeader label="Líquido" sortDir={sort?.key==="vl_liquido"?sort.dir:null} onSort={() => toggleSort("vl_liquido")} active={!!filters.vl_liquido} onClear={() => setFilters({ ...filters, vl_liquido: "" })}>
-                  <input autoFocus style={{ ...S.input, padding: "3px 6px", fontSize: 12, width: 90 }} value={filters.vl_liquido || ""} onChange={e => setFilters({ ...filters, vl_liquido: e.target.value })} />
-                </FilterHeader>
-                <FilterHeader label="Vencimento" sortDir={sort?.key==="vencimento"?sort.dir:null} onSort={() => toggleSort("vencimento")} active={!!filters.vencimento} onClear={() => setFilters({ ...filters, vencimento: "" })}>
-                  <input autoFocus placeholder="dd/mm/aaaa" style={{ ...S.input, padding: "3px 6px", fontSize: 12, width: 100 }} value={filters.vencimento || ""} onChange={e => setFilters({ ...filters, vencimento: e.target.value })} />
-                </FilterHeader>
-                <FilterHeader label="Prev. Pag" sortDir={sort?.key==="prev_pag"?sort.dir:null} onSort={() => toggleSort("prev_pag")} active={!!filters.prev_pag} onClear={() => setFilters({ ...filters, prev_pag: "" })}>
-                  <input autoFocus placeholder="dd/mm/aaaa" style={{ ...S.input, padding: "3px 6px", fontSize: 12, width: 100 }} value={filters.prev_pag || ""} onChange={e => setFilters({ ...filters, prev_pag: e.target.value })} />
-                </FilterHeader>
-                <FilterHeader label="Status" sortDir={sort?.key==="status"?sort.dir:null} onSort={() => toggleSort("status")} active={!!filters.status} onClear={() => setFilters({ ...filters, status: "" })}>
-                  <select style={{ ...S.select, padding: "3px 4px", fontSize: 12, width: 140 }} value={filters.status || ""} onChange={e => setFilters({ ...filters, status: e.target.value })}>
-                    <option value="">Todos</option>
-                    {dimStatus.map(s => <option key={s}>{s}</option>)}
-                  </select>
-                </FilterHeader>
+                {(["escopo","faturado_por","vl_bruto","total_retido","vl_liquido","vencimento","prev_pag","status"] as const).map(key => {
+                  const labels: Record<string,string> = { escopo:"Escopo", faturado_por:"Fat.Por", vl_bruto:"Vl. Bruto", total_retido:"Retido", vl_liquido:"Líquido", vencimento:"Vencimento", prev_pag:"Prev. Pag", status:"Status" };
+                  return (
+                    <FilterHeader key={key} label={labels[key]} sortDir={sort?.key===key?sort.dir:null} onSort={() => toggleSort(key)}
+                      active={!!filters[key]} onClear={() => setFilters({ ...filters, [key]: null })}>
+                      <ExcelFilter options={uniqueValues(allDataRef.current, COL_GETVAL[key])} selected={filters[key] ?? null} onChange={sel => setFilters({ ...filters, [key]: sel })} />
+                    </FilterHeader>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
@@ -1207,7 +1209,7 @@ function CRUDPage<T extends { id?: number }>({ title, icon, endpoint, columns, e
   const [editing, setEditing] = useState<T | null>(null);
   const [form, setForm] = useState<T>(emptyItem);
   const [delTarget, setDelTarget] = useState<T | null>(null);
-  const [colFilters, setColFilters] = useState<Record<string, string>>({});
+  const [colFilters, setColFilters] = useState<Record<string, Set<string> | null>>({});
   const [sort, setSort] = useState<{ key: string; dir: SortDir } | null>(null);
   const load = () => {
     if (spLoad) { spLoad().then(data => setItems(data)).catch(() => { if (staticData) setItems(staticData); }); return; }
@@ -1221,9 +1223,9 @@ function CRUDPage<T extends { id?: number }>({ title, icon, endpoint, columns, e
     return null;
   });
   const filtered = items.filter(row => columns.every(c => {
-    const f = colFilters[c.key];
-    if (!f) return true;
-    return String((row as any)[c.key] ?? "").toLowerCase().includes(f.toLowerCase());
+    const sel = colFilters[c.key];
+    if (!sel) return true;
+    return sel.has(String((row as any)[c.key] ?? ""));
   }));
   if (sort) filtered.sort((a, b) => genericCompare((a as any)[sort.key], (b as any)[sort.key]) * (sort.dir === "asc" ? 1 : -1));
   const setField = (k: keyof T, v: any) => setForm(prev => ({ ...prev, [k]: v }));
@@ -1262,13 +1264,11 @@ function CRUDPage<T extends { id?: number }>({ title, icon, endpoint, columns, e
                 {columns.map(c => (
                   <FilterHeader key={c.key} label={c.label}
                     sortDir={sort?.key === c.key ? sort.dir : null} onSort={() => toggleSort(c.key)}
-                    active={!!colFilters[c.key]} onClear={() => setColFilters(f => ({ ...f, [c.key]: "" }))}>
-                    <input
-                      autoFocus
-                      value={colFilters[c.key] || ""}
-                      onChange={e => setColFilters(f => ({ ...f, [c.key]: e.target.value }))}
-                      placeholder="Filtrar..."
-                      style={{ ...S.input, padding: "3px 6px", fontSize: 12, width: 130 }}
+                    active={!!colFilters[c.key]} onClear={() => setColFilters(f => ({ ...f, [c.key]: null }))}>
+                    <ExcelFilter
+                      options={uniqueValues(items, (r: any) => r[c.key])}
+                      selected={colFilters[c.key] ?? null}
+                      onChange={sel => setColFilters(f => ({ ...f, [c.key]: sel }))}
                     />
                   </FilterHeader>
                 ))}
@@ -1364,7 +1364,7 @@ async function logAndDelete(_endpoint: string, _id: number, _resumo: string, _re
 // ===== DRAFTS PAGE =====
 function DraftsPage({ onDraftsChanged }: { onDraftsChanged?: () => void }) {
   const [items, setItems] = useState<Draft[]>([]);
-  const [f, setF] = useState({ codigo: "", data_draft: "", descricao: "", ativo: "" });
+  const [colFilters, setColFilters] = useState<Record<string, Set<string> | null>>({});
   const [sort, setSort] = useState<{ key: string; dir: SortDir } | null>(null);
 
   const load = () => { setItems(STATIC_DRAFTS as Draft[]); onDraftsChanged?.(); };
@@ -1376,12 +1376,18 @@ function DraftsPage({ onDraftsChanged }: { onDraftsChanged?: () => void }) {
     return null;
   });
 
-  const filtered = items.filter(row =>
-    (!f.codigo || String(row.codigo ?? "").includes(f.codigo)) &&
-    (!f.data_draft || (row.data_draft ?? "").includes(f.data_draft)) &&
-    (!f.descricao || (row.descricao ?? "").toLowerCase().includes(f.descricao.toLowerCase())) &&
-    (!f.ativo || (f.ativo === "sim" ? !!row.ativo : !row.ativo))
-  );
+  const cols: { key: keyof Draft; label: string; getVal: (r: Draft) => any }[] = [
+    { key: "codigo", label: "Código", getVal: r => r.codigo },
+    { key: "data_draft", label: "Data da Draft", getVal: r => fmt.date(r.data_draft) },
+    { key: "descricao", label: "Descrição", getVal: r => r.descricao },
+    { key: "ativo", label: "Ativo", getVal: r => r.ativo ? "✅" : "❌" },
+  ];
+
+  const filtered = items.filter(row => cols.every(c => {
+    const sel = colFilters[c.key as string];
+    if (!sel) return true;
+    return sel.has(String(c.getVal(row) ?? ""));
+  }));
   if (sort) filtered.sort((a, b) => genericCompare((a as any)[sort.key], (b as any)[sort.key]) * (sort.dir === "asc" ? 1 : -1));
 
   return (
@@ -1392,30 +1398,22 @@ function DraftsPage({ onDraftsChanged }: { onDraftsChanged?: () => void }) {
       <div style={S.card}>
         <div style={S.cardHeader}>
           <span style={S.cardTitle}>📝 Drafts ({filtered.length}{filtered.length !== items.length ? ` de ${items.length}` : ""})</span>
-          {(f.codigo || f.data_draft || f.descricao || f.ativo) && <button style={btn("#64748b")} onClick={() => setF({ codigo: "", data_draft: "", descricao: "", ativo: "" })}>✕ Limpar filtros</button>}
+          {Object.values(colFilters).some(Boolean) && <button style={btn("#64748b")} onClick={() => setColFilters({})}>✕ Limpar filtros</button>}
         </div>
         <div style={{ overflowX: "auto" }}>
           <table style={S.table}>
             <thead>
               <tr>
-                <FilterHeader label="Código" sortDir={sort?.key === "codigo" ? sort.dir : null} onSort={() => toggleSort("codigo")}
-                  active={!!f.codigo} onClear={() => setF({ ...f, codigo: "" })}>
-                  <input autoFocus value={f.codigo} onChange={e => setF({ ...f, codigo: e.target.value })} placeholder="Filtrar..." style={{ ...S.input, padding: "3px 6px", fontSize: 12, width: 130 }} />
-                </FilterHeader>
-                <FilterHeader label="Data da Draft" sortDir={sort?.key === "data_draft" ? sort.dir : null} onSort={() => toggleSort("data_draft")}
-                  active={!!f.data_draft} onClear={() => setF({ ...f, data_draft: "" })}>
-                  <input type="date" autoFocus value={f.data_draft} onChange={e => setF({ ...f, data_draft: e.target.value })} style={{ ...S.input, padding: "3px 6px", fontSize: 12 }} />
-                </FilterHeader>
-                <FilterHeader label="Descrição" sortDir={sort?.key === "descricao" ? sort.dir : null} onSort={() => toggleSort("descricao")}
-                  active={!!f.descricao} onClear={() => setF({ ...f, descricao: "" })}>
-                  <input autoFocus value={f.descricao} onChange={e => setF({ ...f, descricao: e.target.value })} placeholder="Filtrar..." style={{ ...S.input, padding: "3px 6px", fontSize: 12, width: 130 }} />
-                </FilterHeader>
-                <FilterHeader label="Ativo" sortDir={sort?.key === "ativo" ? sort.dir : null} onSort={() => toggleSort("ativo")}
-                  active={!!f.ativo} onClear={() => setF({ ...f, ativo: "" })}>
-                  <select value={f.ativo} onChange={e => setF({ ...f, ativo: e.target.value })} style={{ ...S.select, padding: "3px 6px", fontSize: 12 }}>
-                    <option value="">Todos</option><option value="sim">✅</option><option value="nao">❌</option>
-                  </select>
-                </FilterHeader>
+                {cols.map(c => (
+                  <FilterHeader key={c.key as string} label={c.label} sortDir={sort?.key === c.key ? sort.dir : null} onSort={() => toggleSort(c.key as string)}
+                    active={!!colFilters[c.key as string]} onClear={() => setColFilters(f => ({ ...f, [c.key]: null }))}>
+                    <ExcelFilter
+                      options={uniqueValues(items, c.getVal)}
+                      selected={colFilters[c.key as string] ?? null}
+                      onChange={sel => setColFilters(f => ({ ...f, [c.key]: sel }))}
+                    />
+                  </FilterHeader>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -1920,13 +1918,25 @@ function ProducaoPage() {
   const [editing, setEditing] = useState<ProducaoItem | null>(null);
   const [form, setForm] = useState<ProducaoItem>({ ...EMPTY_PROD });
   const [delTarget, setDelTarget] = useState<ProducaoItem | null>(null);
-  const [colFilters, setColFilters] = useState<Record<string, string>>({});
+  const [colFilters, setColFilters] = useState<Record<string, Set<string> | null>>({});
   const [sort, setSort] = useState<{ key: string; dir: SortDir } | null>(null);
   const SORT_FIELD: Record<string, keyof ProducaoItem> = {
-    idwo: "IDWO", wo: "WO_Producao", pais: "ID_Country", ano: "Year_Producao", ef: "E_Or_F",
+    idwo: "IDWO", wo: "WO_Producao", pais: "ID_Country", mes: "Month_Producao", ano: "Year_Producao", ef: "E_Or_F",
     cliente: "Nome_Cliente_Producao", plataforma: "Rig_Producao", categoria: "Contract_Category_Producao",
     di: "DI_Producao", invoice: "Number_Of_Invoice_Producao", value: "Value_Producao", total: "Total_Producao",
     wip: "WIP_Producao", ticket: "Ticket_Medio_Producao",
+  };
+  const COL_GETVAL: Record<string, (x: ProducaoItem) => any> = {
+    idwo: x => x.IDWO, wo: x => x.WO_Producao,
+    pais: x => x.ID_Country != null ? (PAISES_PROD[x.ID_Country] || x.ID_Country) : '',
+    mes: x => x.Month_Producao != null ? MESES_PT[x.Month_Producao] : '',
+    ano: x => x.Year_Producao, ef: x => x.E_Or_F,
+    cliente: x => x.Nome_Cliente_Producao, plataforma: x => x.Rig_Producao, categoria: x => x.Contract_Category_Producao,
+    di: x => x.DI_Producao, invoice: x => x.Number_Of_Invoice_Producao,
+    value: x => x.Value_Producao != null ? fmt.brl(x.Value_Producao) : '',
+    total: x => x.Total_Producao != null ? fmt.brl(x.Total_Producao) : '',
+    wip: x => x.WIP_Producao != null ? fmt.brl(x.WIP_Producao) : '',
+    ticket: x => x.Ticket_Medio_Producao != null ? fmt.brl(x.Ticket_Medio_Producao) : '',
   };
   const toggleSort = (key: string) => setSort(s => {
     if (!s || s.key !== key) return { key, dir: "asc" };
@@ -1945,25 +1955,13 @@ function ProducaoPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const setColFilter = (k: string, v: string) => setColFilters(f => ({ ...f, [k]: v }));
+  const setColFilter = (k: string, v: Set<string> | null) => setColFilters(f => ({ ...f, [k]: v }));
   const clearColFilters = () => setColFilters({});
-  const filtered = items.filter(x =>
-    (!colFilters.idwo || String(x.IDWO ?? '').toLowerCase().includes(colFilters.idwo.toLowerCase())) &&
-    (!colFilters.wo || String(x.WO_Producao ?? '').includes(colFilters.wo)) &&
-    (!colFilters.pais || String(x.ID_Country ?? '') === colFilters.pais) &&
-    (!colFilters.mes || x.Month_Producao === +colFilters.mes) &&
-    (!colFilters.ano || String(x.Year_Producao ?? '').includes(colFilters.ano)) &&
-    (!colFilters.ef || x.E_Or_F === colFilters.ef) &&
-    (!colFilters.cliente || (x.Nome_Cliente_Producao ?? '').toLowerCase().includes(colFilters.cliente.toLowerCase())) &&
-    (!colFilters.plataforma || (x.Rig_Producao ?? '').toLowerCase().includes(colFilters.plataforma.toLowerCase())) &&
-    (!colFilters.categoria || (x.Contract_Category_Producao ?? '').toLowerCase().includes(colFilters.categoria.toLowerCase())) &&
-    (!colFilters.di || String(x.DI_Producao ?? '').toLowerCase().includes(colFilters.di.toLowerCase())) &&
-    (!colFilters.invoice || String(x.Number_Of_Invoice_Producao ?? '').includes(colFilters.invoice)) &&
-    (!colFilters.value || String(x.Value_Producao ?? '').includes(colFilters.value)) &&
-    (!colFilters.total || String(x.Total_Producao ?? '').includes(colFilters.total)) &&
-    (!colFilters.wip || String(x.WIP_Producao ?? '').includes(colFilters.wip)) &&
-    (!colFilters.ticket || String(x.Ticket_Medio_Producao ?? '').includes(colFilters.ticket))
-  );
+  const filtered = items.filter(x => Object.keys(COL_GETVAL).every(k => {
+    const sel = colFilters[k];
+    if (!sel) return true;
+    return sel.has(String(COL_GETVAL[k](x) ?? ''));
+  }));
   if (sort) filtered.sort((a, b) => genericCompare(a[SORT_FIELD[sort.key]], b[SORT_FIELD[sort.key]]) * (sort.dir === "asc" ? 1 : -1));
 
   const hf = (k: keyof ProducaoItem, v: any) => {
@@ -2071,59 +2069,25 @@ function ProducaoPage() {
             <thead>
               <tr>
                 <th style={{ ...S.th, width:70 }}>Ações</th>
-                <FilterHeader label="IDWO" sortDir={sort?.key==="idwo"?sort.dir:null} onSort={() => toggleSort("idwo")} active={!!colFilters.idwo} onClear={() => setColFilter("idwo","")}>
-                  <input autoFocus value={colFilters.idwo||""} onChange={e => setColFilter("idwo", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:12, width:110 }} />
-                </FilterHeader>
-                <FilterHeader label="WO" sortDir={sort?.key==="wo"?sort.dir:null} onSort={() => toggleSort("wo")} active={!!colFilters.wo} onClear={() => setColFilter("wo","")}>
-                  <input autoFocus value={colFilters.wo||""} onChange={e => setColFilter("wo", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:12, width:100 }} />
-                </FilterHeader>
-                <FilterHeader label="País" sortDir={sort?.key==="pais"?sort.dir:null} onSort={() => toggleSort("pais")} active={!!colFilters.pais} onClear={() => setColFilter("pais","")}>
-                  <select value={colFilters.pais||""} onChange={e => setColFilter("pais", e.target.value)} style={{ ...S.select, padding:"3px 6px", fontSize:12 }}>
-                    <option value="">Todos</option>
-                    {Object.entries(PAISES_PROD).map(([id,label]) => <option key={id} value={id}>{label}</option>)}
-                  </select>
-                </FilterHeader>
-                <FilterHeader label="Mês/Ano" sortDir={sort?.key==="ano"?sort.dir:null} onSort={() => toggleSort("ano")} active={!!(colFilters.mes||colFilters.ano)} onClear={() => setColFilters(f => ({ ...f, mes:"", ano:"" }))}>
-                  <div style={{ display:"flex", gap:2 }}>
-                    <select value={colFilters.mes||""} onChange={e => setColFilter("mes", e.target.value)} style={{ ...S.select, padding:"3px 4px", fontSize:12, width:64 }}>
-                      <option value="">Mês</option>
-                      {MESES_PT.slice(1).map((m,i) => <option key={i+1} value={i+1}>{m}</option>)}
-                    </select>
-                    <input value={colFilters.ano||""} onChange={e => setColFilter("ano", e.target.value)} placeholder="Ano" style={{ ...S.input, padding:"3px 6px", fontSize:12, width:60 }} />
-                  </div>
-                </FilterHeader>
-                <FilterHeader label="E/F" sortDir={sort?.key==="ef"?sort.dir:null} onSort={() => toggleSort("ef")} active={!!colFilters.ef} onClear={() => setColFilter("ef","")}>
-                  <select value={colFilters.ef||""} onChange={e => setColFilter("ef", e.target.value)} style={{ ...S.select, padding:"3px 6px", fontSize:12 }}>
-                    <option value="">Todos</option><option value="E">E</option><option value="F">F</option>
-                  </select>
-                </FilterHeader>
-                <FilterHeader label="Cliente" sortDir={sort?.key==="cliente"?sort.dir:null} onSort={() => toggleSort("cliente")} active={!!colFilters.cliente} onClear={() => setColFilter("cliente","")}>
-                  <input autoFocus value={colFilters.cliente||""} onChange={e => setColFilter("cliente", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:12, width:130 }} />
-                </FilterHeader>
-                <FilterHeader label="Plataforma" sortDir={sort?.key==="plataforma"?sort.dir:null} onSort={() => toggleSort("plataforma")} active={!!colFilters.plataforma} onClear={() => setColFilter("plataforma","")}>
-                  <input autoFocus value={colFilters.plataforma||""} onChange={e => setColFilter("plataforma", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:12, width:130 }} />
-                </FilterHeader>
-                <FilterHeader label="Categoria" sortDir={sort?.key==="categoria"?sort.dir:null} onSort={() => toggleSort("categoria")} active={!!colFilters.categoria} onClear={() => setColFilter("categoria","")}>
-                  <input autoFocus value={colFilters.categoria||""} onChange={e => setColFilter("categoria", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:12, width:110 }} />
-                </FilterHeader>
-                <FilterHeader label="DI" sortDir={sort?.key==="di"?sort.dir:null} onSort={() => toggleSort("di")} active={!!colFilters.di} onClear={() => setColFilter("di","")}>
-                  <input autoFocus value={colFilters.di||""} onChange={e => setColFilter("di", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:12, width:90 }} />
-                </FilterHeader>
-                <FilterHeader label="Invoice" sortDir={sort?.key==="invoice"?sort.dir:null} onSort={() => toggleSort("invoice")} active={!!colFilters.invoice} onClear={() => setColFilter("invoice","")}>
-                  <input autoFocus value={colFilters.invoice||""} onChange={e => setColFilter("invoice", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:12, width:90 }} />
-                </FilterHeader>
-                <FilterHeader label="Value" sortDir={sort?.key==="value"?sort.dir:null} onSort={() => toggleSort("value")} active={!!colFilters.value} onClear={() => setColFilter("value","")}>
-                  <input autoFocus value={colFilters.value||""} onChange={e => setColFilter("value", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:12, width:100 }} />
-                </FilterHeader>
-                <FilterHeader label="Total" sortDir={sort?.key==="total"?sort.dir:null} onSort={() => toggleSort("total")} active={!!colFilters.total} onClear={() => setColFilter("total","")}>
-                  <input autoFocus value={colFilters.total||""} onChange={e => setColFilter("total", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:12, width:100 }} />
-                </FilterHeader>
-                <FilterHeader label="WIP" sortDir={sort?.key==="wip"?sort.dir:null} onSort={() => toggleSort("wip")} active={!!colFilters.wip} onClear={() => setColFilter("wip","")}>
-                  <input autoFocus value={colFilters.wip||""} onChange={e => setColFilter("wip", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:12, width:100 }} />
-                </FilterHeader>
-                <FilterHeader label="Ticket Médio" sortDir={sort?.key==="ticket"?sort.dir:null} onSort={() => toggleSort("ticket")} active={!!colFilters.ticket} onClear={() => setColFilter("ticket","")}>
-                  <input autoFocus value={colFilters.ticket||""} onChange={e => setColFilter("ticket", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:12, width:100 }} />
-                </FilterHeader>
+                {(["idwo","wo","pais","mes","ef","cliente","plataforma","categoria","di","invoice","value","total","wip","ticket"] as const).map(key => {
+                  const labels: Record<string,string> = { idwo:"IDWO", wo:"WO", pais:"País", mes:"Mês/Ano", ef:"E/F", cliente:"Cliente", plataforma:"Plataforma", categoria:"Categoria", di:"DI", invoice:"Invoice", value:"Value", total:"Total", wip:"WIP", ticket:"Ticket Médio" };
+                  const active = key === "mes" ? !!(colFilters.mes || colFilters.ano) : !!colFilters[key];
+                  const onClear = key === "mes" ? () => setColFilters(f => ({ ...f, mes: null, ano: null })) : () => setColFilter(key, null);
+                  return (
+                    <FilterHeader key={key} label={labels[key]} sortDir={sort?.key===key?sort.dir:null} onSort={() => toggleSort(key)} active={active} onClear={onClear}>
+                      {key === "mes" ? (
+                        <div>
+                          <div style={{ fontSize:10, fontWeight:700, color:N.muted, marginBottom:2 }}>MÊS</div>
+                          <ExcelFilter options={uniqueValues(items, COL_GETVAL.mes)} selected={colFilters.mes ?? null} onChange={sel => setColFilter("mes", sel)} />
+                          <div style={{ fontSize:10, fontWeight:700, color:N.muted, margin:"6px 0 2px" }}>ANO</div>
+                          <ExcelFilter options={uniqueValues(items, COL_GETVAL.ano)} selected={colFilters.ano ?? null} onChange={sel => setColFilter("ano", sel)} />
+                        </div>
+                      ) : (
+                        <ExcelFilter options={uniqueValues(items, COL_GETVAL[key])} selected={colFilters[key] ?? null} onChange={sel => setColFilter(key, sel)} />
+                      )}
+                    </FilterHeader>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
