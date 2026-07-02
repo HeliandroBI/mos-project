@@ -685,7 +685,10 @@ const PROJDIARIAS_LIST = 'projetosdiarias';
 function mapSpToProjeto(item: any) {
   const parseNum = (v: any) => {
     if (v == null || v === '' || v === '0') return undefined;
-    const n = parseFloat(String(v).replace(',', '.'));
+    let s = String(v).trim();
+    // Formato brasileiro "7.667,00": remove separador de milhar (.) antes de trocar a vírgula decimal
+    if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+    const n = parseFloat(s);
     return isNaN(n) ? undefined : n;
   };
   const parseStr = (v: any) => {
@@ -726,7 +729,7 @@ export async function listProjetosFromSP(): Promise<any[]> {
   if (_projetosCache) return _projetosCache;
   const token = await getToken();
   let all: any[] = [];
-  let url: string | null = `${SITE}/_api/web/lists/getbytitle('${PROJ_LIST}')/items?$top=2000&$orderby=WO asc`;
+  let url: string | null = `${SITE}/_api/web/lists/getbytitle('${PROJDIARIAS_LIST}')/items?$top=2000&$orderby=WO asc`;
   while (url) {
     const r = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json;odata=nometadata' } });
     if (!r.ok) throw new Error(`SP listProjetos: ${r.status}`);
@@ -741,7 +744,7 @@ export async function listProjetosFromSP(): Promise<any[]> {
 export async function createProjeto(p: any): Promise<void> {
   const token = await getToken();
   const digest = await getDigest();
-  const r = await fetch(`${SITE}/_api/web/lists/getbytitle('${PROJ_LIST}')/items`, {
+  const r = await fetch(`${SITE}/_api/web/lists/getbytitle('${PROJDIARIAS_LIST}')/items`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'X-RequestDigest': digest, 'Content-Type': 'application/json', Accept: 'application/json;odata=nometadata' },
     body: JSON.stringify(projetoToSp(p)),
@@ -753,7 +756,7 @@ export async function createProjeto(p: any): Promise<void> {
 export async function updateProjeto(id: number, p: any): Promise<void> {
   const token = await getToken();
   const digest = await getDigest();
-  const r = await fetch(`${SITE}/_api/web/lists/getbytitle('${PROJ_LIST}')/items(${id})`, {
+  const r = await fetch(`${SITE}/_api/web/lists/getbytitle('${PROJDIARIAS_LIST}')/items(${id})`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'X-RequestDigest': digest, 'Content-Type': 'application/json', Accept: 'application/json;odata=nometadata', 'X-HTTP-Method': 'MERGE', 'If-Match': '*' },
     body: JSON.stringify(projetoToSp(p)),
@@ -765,7 +768,7 @@ export async function updateProjeto(id: number, p: any): Promise<void> {
 export async function deleteProjeto(id: number): Promise<void> {
   const token = await getToken();
   const digest = await getDigest();
-  const r = await fetch(`${SITE}/_api/web/lists/getbytitle('${PROJ_LIST}')/items(${id})`, {
+  const r = await fetch(`${SITE}/_api/web/lists/getbytitle('${PROJDIARIAS_LIST}')/items(${id})`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'X-RequestDigest': digest, 'X-HTTP-Method': 'DELETE', 'If-Match': '*' },
   });
