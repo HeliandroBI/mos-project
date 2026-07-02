@@ -408,6 +408,61 @@ function calcImpostos(f: ContaReceber, impostos: Imposto[]): Partial<ContaRecebe
   };
 }
 
+// ===== PRAZOS: Vencimento / Prev.Fat / Prev.Pag =====
+// Espelha a lógica que existia no backend (contas.py: aplicar_calculos), nunca portada
+// para o frontend na migração para SharePoint.
+const FERIADOS_SET = new Set(STATIC_FERIADOS.map(f => f.data));
+
+function parseDataInput(s?: string): Date | undefined {
+  if (!s) return undefined;
+  return new Date(s + "T12:00:00");
+}
+function addDias(d: Date, n: number): Date {
+  const r = new Date(d); r.setDate(r.getDate() + n); return r;
+}
+function toISODate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function proximoDiaUtil(d: Date): Date {
+  let cur = d;
+  while (cur.getDay() === 0 || cur.getDay() === 6 || FERIADOS_SET.has(toISODate(cur))) cur = addDias(cur, 1);
+  return cur;
+}
+
+function calcPrazos(f: ContaReceber): Partial<ContaReceber> {
+  const prazo = (STATIC_CLIENTES_PRAZOS as ClientePrazo[]).find(p => p.cliente === f.cliente);
+  const out: Partial<ContaReceber> = {};
+
+  // Vencimento = Data Doc + soma dos prazos do cliente (dias corridos), no próximo dia útil
+  if (f.data_doc && prazo) {
+    const dd = parseDataInput(f.data_doc)!;
+    const total = prazo.rec_doc + prazo.medicao + prazo.resp_cli + prazo.vencimento + prazo.cambio;
+    out.vencimento = toISODate(proximoDiaUtil(addDias(dd, total)));
+  }
+
+  // Prev.Pag = dia-limite de pagamento do cliente no mês do Vencimento (ou no seguinte, se já passou), próximo dia útil
+  const vencimentoBase = out.vencimento ?? f.vencimento;
+  if (vencimentoBase) {
+    const dl = prazo ? prazo.data_limite : 30;
+    const venc = parseDataInput(vencimentoBase)!;
+    let prev = new Date(venc.getFullYear(), venc.getMonth(), Math.min(dl, 28), 12);
+    if (prev < venc) {
+      const m = (venc.getMonth() + 1) % 12;
+      const y = venc.getFullYear() + (venc.getMonth() === 11 ? 1 : 0);
+      prev = new Date(y, m, Math.min(dl, 28), 12);
+    }
+    out.prev_pag = toISODate(proximoDiaUtil(prev));
+  }
+
+  // Prev.Fat = Data Fim + prazo "Rec. Doc" do cliente (dias corridos), no próximo dia útil
+  if (f.data_fim && prazo) {
+    const df = parseDataInput(f.data_fim)!;
+    out.prev_fat = toISODate(proximoDiaUtil(addDias(df, prazo.rec_doc)));
+  }
+
+  return out;
+}
+
 // ===== CONTA FORM =====
 function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraftsChanged, spAccount }: { conta: ContaReceber; onSave: (c: ContaReceber) => void; onClose: () => void; drafts: Draft[]; projetos: Projeto[]; impostos: Imposto[]; onDraftsChanged?: () => void; spAccount?: { name?: string; username?: string } | null }) {
   // Para nova conta, draft_id=0 significa "criar nova draft ao salvar"
@@ -463,11 +518,14 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraft
       const newVl = calcVlBruto(updated, projData);
       if (newVl != null) updated.vl_bruto = +newVl.toFixed(2);
     }
+    let next = updated;
     if (["vl_bruto", "doc", "faturado_por", "escopo", "data_inicio", "data_fim", "tipo_servico"].includes(k as string)) {
-      setForm({ ...updated, ...calcImpostos(updated, impostos) });
-    } else {
-      setForm(updated);
+      next = { ...next, ...calcImpostos(next, impostos) };
     }
+    if (["cliente", "data_doc", "data_fim", "vencimento"].includes(k as string)) {
+      next = { ...next, ...calcPrazos(next) };
+    }
+    setForm(next);
   };
 
   const applyWO = (woNum: number) => {
@@ -486,7 +544,7 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraft
         const updated = { ...form, wo: woNum, cliente, plataforma, coord_focal: form.coord_focal };
         const newVl = calcVlBruto(updated, pd);
         if (newVl != null) updated.vl_bruto = +newVl.toFixed(2);
-        setForm({ ...updated, ...calcImpostos(updated, impostos) });
+        setForm({ ...updated, ...calcImpostos(updated, impostos), ...calcPrazos(updated) });
         return;
       }
     }
@@ -496,7 +554,7 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraft
     const updated = { ...form, wo: woNum, cliente: proj.cliente, plataforma: proj.plataforma, coord_focal: proj.coordenador };
     const newVl = calcVlBruto(updated, pd);
     if (newVl != null) updated.vl_bruto = +newVl.toFixed(2);
-    setForm({ ...updated, ...calcImpostos(updated, impostos) });
+    setForm({ ...updated, ...calcImpostos(updated, impostos), ...calcPrazos(updated) });
   };
 
   const todayLabel = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
