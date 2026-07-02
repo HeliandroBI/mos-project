@@ -636,6 +636,11 @@ function ContasPage({ drafts, projetos, impostos, onDraftsChanged, spAccount }: 
     if (f.data_doc)      r = r.filter((x: any) => (x.data_doc ?? '') === f.data_doc);
     if (f.data_doc_de)   r = r.filter((x: any) => (x.data_doc ?? '') >= f.data_doc_de);
     if (f.data_doc_ate)  r = r.filter((x: any) => (x.data_doc ?? '') <= f.data_doc_ate);
+    if (f.vl_bruto)      r = r.filter((x: any) => fmt.brl(x.vl_bruto).includes(f.vl_bruto));
+    if (f.total_retido)  r = r.filter((x: any) => fmt.brl(x.total_retido).includes(f.total_retido));
+    if (f.vl_liquido)    r = r.filter((x: any) => fmt.brl(x.vl_liquido).includes(f.vl_liquido));
+    if (f.vencimento)    r = r.filter((x: any) => fmt.date(x.vencimento).includes(f.vencimento));
+    if (f.prev_pag)      r = r.filter((x: any) => fmt.date(x.prev_pag).includes(f.prev_pag));
     setItems(r);
     setTotal({ total: r.length, total_bruto: r.reduce((s, x) => s + (x.vl_bruto || 0), 0), total_liquido: r.reduce((s, x) => s + (x.vl_liquido || 0), 0) });
   }, []);
@@ -714,98 +719,12 @@ function ContasPage({ drafts, projetos, impostos, onDraftsChanged, spAccount }: 
         ))}
       </div>
 
-      {/* Filtros */}
-      <div style={S.filters}>
-        {/* WO */}
-        <div><label style={{ ...S.label, fontSize: 10, textTransform: "uppercase" as const }}>WO</label>
-          <input style={{ ...S.input, width: 75 }} value={filters.wo || ""} onChange={e => setFilters({ ...filters, wo: e.target.value })} /></div>
-        {/* Cliente dropdown */}
-        <div><label style={{ ...S.label, fontSize: 10, textTransform: "uppercase" as const }}>Cliente</label>
-          <select style={{ ...S.select, width: 160 }} value={filters.cliente_id || ""} onChange={e => setFilters({ ...filters, cliente_id: e.target.value })}>
-            <option value="">Todos</option>
-            {dimClientes.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-          </select></div>
-        {/* Plataforma dropdown */}
-        <div><label style={{ ...S.label, fontSize: 10, textTransform: "uppercase" as const }}>Plataforma</label>
-          <select style={{ ...S.select, width: 160 }} value={filters.plataforma_id || ""} onChange={e => setFilters({ ...filters, plataforma_id: e.target.value })}>
-            <option value="">Todas</option>
-            {dimPlataformas.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
-          </select></div>
-        {/* Draft */}
-        <div><label style={{ ...S.label, fontSize: 10, textTransform: "uppercase" as const }}>Draft</label>
-          <input type="number" style={{ ...S.input, width: 80 }} value={filters.draft_codigo || ""} onChange={e => setFilters({ ...filters, draft_codigo: e.target.value })} /></div>
-        {/* Doc */}
-        <div><label style={{ ...S.label, fontSize: 10, textTransform: "uppercase" as const }}>Doc</label>
-          <select style={{ ...S.select, width: 100 }} value={filters.doc || ""} onChange={e => setFilters({ ...filters, doc: e.target.value })}>
-            <option value="">Todos</option>
-            {["NFSe", "FAT. LOC.", "DANFE", "NFSe(ex)", "Nota de Débito", "DANFE(ex)", "FAT.LOC.(ex)", "Crédito"].map(s => <option key={s}>{s}</option>)}
-          </select></div>
-        {/* Nº Doc */}
-        <div><label style={{ ...S.label, fontSize: 10, textTransform: "uppercase" as const }}>Nº</label>
-          <input style={{ ...S.input, width: 90 }} value={filters.num_doc || ""} onChange={e => setFilters({ ...filters, num_doc: e.target.value })} /></div>
-        {/* Data Doc */}
-        <div>
-          <label style={{ ...S.label, fontSize: 10, textTransform: "uppercase" as const }}>Data</label>
-          <div style={{ display: "flex", flexDirection: "column" as const, gap: 4 }}>
-            <div style={{ display: "flex", gap: 2 }}>
-              {(["Exata","Mês","Período"] as const).map(m => (
-                <button key={m} onClick={() => setFilters({ ...filters, _dataModo: m, data_doc: undefined, data_doc_de: undefined, data_doc_ate: undefined })}
-                  style={{ fontSize: 10, padding: "2px 7px", borderRadius: 6, border: "none", cursor: "pointer", fontWeight: 600,
-                    background: (filters._dataModo || "Exata") === m ? N.accent : N.bg,
-                    color: (filters._dataModo || "Exata") === m ? "#fff" : N.muted,
-                    boxShadow: (filters._dataModo || "Exata") === m ? inset : neo }}>{m}</button>
-              ))}
-            </div>
-            {(!filters._dataModo || filters._dataModo === "Exata") && (
-              <input type="date" style={{ ...S.input, width: 130 }} value={filters.data_doc || ""} onChange={e => setFilters({ ...filters, data_doc: e.target.value })} />
-            )}
-            {filters._dataModo === "Mês" && (
-              <input type="month" style={{ ...S.input, width: 130 }} value={filters._mesSel || ""} onChange={e => {
-                const v = e.target.value; // "2026-04"
-                if (!v) { setFilters({ ...filters, _mesSel: "", data_doc_de: undefined, data_doc_ate: undefined }); return; }
-                const [y, m] = v.split("-").map(Number);
-                const ultimo = new Date(y, m, 0).getDate();
-                setFilters({ ...filters, _mesSel: v, data_doc_de: `${v}-01`, data_doc_ate: `${v}-${String(ultimo).padStart(2,"0")}` });
-              }} />
-            )}
-            {filters._dataModo === "Período" && (
-              <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                <input type="date" style={{ ...S.input, width: 120 }} placeholder="De" value={filters.data_doc_de || ""} onChange={e => setFilters({ ...filters, data_doc_de: e.target.value })} />
-                <span style={{ color: N.muted, fontSize: 11 }}>–</span>
-                <input type="date" style={{ ...S.input, width: 120 }} placeholder="Até" value={filters.data_doc_ate || ""} onChange={e => setFilters({ ...filters, data_doc_ate: e.target.value })} />
-              </div>
-            )}
-          </div>
-        </div>
-        {/* Escopo */}
-        <div><label style={{ ...S.label, fontSize: 10, textTransform: "uppercase" as const }}>Escopo</label>
-          <select style={{ ...S.select, width: 110 }} value={filters.escopo || ""} onChange={e => setFilters({ ...filters, escopo: e.target.value })}>
-            <option value="">Todos</option>
-            {dimEscopo.map(s => <option key={s}>{s}</option>)}
-          </select></div>
-        {/* Fat.Por */}
-        <div><label style={{ ...S.label, fontSize: 10, textTransform: "uppercase" as const }}>Fat.Por</label>
-          <select style={{ ...S.select, width: 110 }} value={filters.faturado_por || ""} onChange={e => setFilters({ ...filters, faturado_por: e.target.value })}>
-            <option value="">Todos</option>
-            {dimFatPor.map(s => <option key={s}>{s}</option>)}
-          </select></div>
-        {/* Status */}
-        <div><label style={{ ...S.label, fontSize: 10, textTransform: "uppercase" as const }}>Status</label>
-          <select style={{ ...S.select, width: 180 }} value={filters.status || ""} onChange={e => setFilters({ ...filters, status: e.target.value })}>
-            <option value="">Todos</option>
-            {dimStatus.map(s => <option key={s}>{s}</option>)}
-          </select></div>
-        <div style={{ display: "flex", gap: 5, alignItems: "flex-end" }}>
-          <button style={btn()} onClick={load}>🔍 Filtrar</button>
-          <button style={btn("#64748b")} onClick={() => { setFilters({}); }}>✕ Limpar</button>
-        </div>
-      </div>
-
       {/* Tabela */}
       <div style={S.card}>
         <div style={S.cardHeader}>
-          <span style={S.cardTitle}>📋 Contas a Receber · {total.total} registros {loading && "⏳"}</span>
+          <span style={S.cardTitle}>📋 Contas a Receber · {total.total}{allDataRef.current.length !== total.total ? ` de ${allDataRef.current.length}` : ""} registros {loading && "⏳"}</span>
           <div style={{ display: "flex", gap: 5 }}>
+            {Object.entries(filters).some(([k,v]) => !k.startsWith("_") && v) && <button style={btn("#64748b")} onClick={() => setFilters({})}>✕ Limpar filtros</button>}
             <button style={btn("#059669")} onClick={() => setEditing({})}>➕ Novo</button>
             <button style={btn("#0891b2")} title="Recalcula VL.Bruto, impostos, Vencimento, Prev.Fat e Prev.Pag de todos os registros" onClick={() => {
               alert("Recálculo disponível apenas com backend ativo.");
@@ -825,11 +744,106 @@ function ContasPage({ drafts, projetos, impostos, onDraftsChanged, spAccount }: 
         </div>
         <div style={{ overflowX: "auto" }}>
           <table style={S.table}>
-            <thead><tr>
-              <th style={{ ...S.th, width: 28 }}></th>
-              <th style={{ ...S.th, width: 90 }}>Ações</th>
-              {["WO", "Draft", "Cliente", "Plataforma", "Doc", "Nº", "Data", "Escopo", "Fat.Por", "Vl. Bruto", "Retido", "Líquido", "Vencimento", "Prev. Pag", "Status"].map(h => <th key={h} style={S.th}>{h}</th>)}
-            </tr></thead>
+            <thead>
+              <tr>
+                <th style={{ ...S.th, width: 28 }}></th>
+                <th style={{ ...S.th, width: 90 }}>Ações</th>
+                {["WO", "Draft", "Cliente", "Plataforma", "Doc", "Nº", "Data", "Escopo", "Fat.Por", "Vl. Bruto", "Retido", "Líquido", "Vencimento", "Prev. Pag", "Status"].map(h => <th key={h} style={S.th}>{h}</th>)}
+              </tr>
+              <tr>
+                <th style={S.th}></th>
+                <th style={S.th}></th>
+                {/* WO */}
+                <th style={{ ...S.th, fontWeight: 400 }}><input style={{ ...S.input, padding: "3px 6px", fontSize: 11, width: 60 }} value={filters.wo || ""} onChange={e => setFilters({ ...filters, wo: e.target.value })} /></th>
+                {/* Draft */}
+                <th style={{ ...S.th, fontWeight: 400 }}><input type="number" style={{ ...S.input, padding: "3px 6px", fontSize: 11, width: 60 }} value={filters.draft_codigo || ""} onChange={e => setFilters({ ...filters, draft_codigo: e.target.value })} /></th>
+                {/* Cliente */}
+                <th style={{ ...S.th, fontWeight: 400 }}>
+                  <select style={{ ...S.select, padding: "3px 4px", fontSize: 11, width: 110 }} value={filters.cliente_id || ""} onChange={e => setFilters({ ...filters, cliente_id: e.target.value })}>
+                    <option value="">Todos</option>
+                    {dimClientes.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                  </select>
+                </th>
+                {/* Plataforma */}
+                <th style={{ ...S.th, fontWeight: 400 }}>
+                  <select style={{ ...S.select, padding: "3px 4px", fontSize: 11, width: 110 }} value={filters.plataforma_id || ""} onChange={e => setFilters({ ...filters, plataforma_id: e.target.value })}>
+                    <option value="">Todas</option>
+                    {dimPlataformas.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+                  </select>
+                </th>
+                {/* Doc */}
+                <th style={{ ...S.th, fontWeight: 400 }}>
+                  <select style={{ ...S.select, padding: "3px 4px", fontSize: 11, width: 90 }} value={filters.doc || ""} onChange={e => setFilters({ ...filters, doc: e.target.value })}>
+                    <option value="">Todos</option>
+                    {["NFSe", "FAT. LOC.", "DANFE", "NFSe(ex)", "Nota de Débito", "DANFE(ex)", "FAT.LOC.(ex)", "Crédito"].map(s => <option key={s}>{s}</option>)}
+                  </select>
+                </th>
+                {/* Nº Doc */}
+                <th style={{ ...S.th, fontWeight: 400 }}><input style={{ ...S.input, padding: "3px 6px", fontSize: 11, width: 70 }} value={filters.num_doc || ""} onChange={e => setFilters({ ...filters, num_doc: e.target.value })} /></th>
+                {/* Data */}
+                <th style={{ ...S.th, fontWeight: 400 }}>
+                  <div style={{ display: "flex", flexDirection: "column" as const, gap: 2 }}>
+                    <div style={{ display: "flex", gap: 2 }}>
+                      {(["Exata","Mês","Período"] as const).map(m => (
+                        <button key={m} onClick={() => setFilters({ ...filters, _dataModo: m, data_doc: undefined, data_doc_de: undefined, data_doc_ate: undefined })}
+                          style={{ fontSize: 9, padding: "1px 5px", borderRadius: 5, border: "none", cursor: "pointer", fontWeight: 600,
+                            background: (filters._dataModo || "Exata") === m ? N.accent : N.bg,
+                            color: (filters._dataModo || "Exata") === m ? "#fff" : N.muted }}>{m}</button>
+                      ))}
+                    </div>
+                    {(!filters._dataModo || filters._dataModo === "Exata") && (
+                      <input type="date" style={{ ...S.input, padding: "3px 6px", fontSize: 11, width: 120 }} value={filters.data_doc || ""} onChange={e => setFilters({ ...filters, data_doc: e.target.value })} />
+                    )}
+                    {filters._dataModo === "Mês" && (
+                      <input type="month" style={{ ...S.input, padding: "3px 6px", fontSize: 11, width: 120 }} value={filters._mesSel || ""} onChange={e => {
+                        const v = e.target.value;
+                        if (!v) { setFilters({ ...filters, _mesSel: "", data_doc_de: undefined, data_doc_ate: undefined }); return; }
+                        const [y, m] = v.split("-").map(Number);
+                        const ultimo = new Date(y, m, 0).getDate();
+                        setFilters({ ...filters, _mesSel: v, data_doc_de: `${v}-01`, data_doc_ate: `${v}-${String(ultimo).padStart(2,"0")}` });
+                      }} />
+                    )}
+                    {filters._dataModo === "Período" && (
+                      <div style={{ display: "flex", gap: 2, alignItems: "center" }}>
+                        <input type="date" style={{ ...S.input, padding: "3px 4px", fontSize: 10, width: 95 }} value={filters.data_doc_de || ""} onChange={e => setFilters({ ...filters, data_doc_de: e.target.value })} />
+                        <input type="date" style={{ ...S.input, padding: "3px 4px", fontSize: 10, width: 95 }} value={filters.data_doc_ate || ""} onChange={e => setFilters({ ...filters, data_doc_ate: e.target.value })} />
+                      </div>
+                    )}
+                  </div>
+                </th>
+                {/* Escopo */}
+                <th style={{ ...S.th, fontWeight: 400 }}>
+                  <select style={{ ...S.select, padding: "3px 4px", fontSize: 11, width: 90 }} value={filters.escopo || ""} onChange={e => setFilters({ ...filters, escopo: e.target.value })}>
+                    <option value="">Todos</option>
+                    {dimEscopo.map(s => <option key={s}>{s}</option>)}
+                  </select>
+                </th>
+                {/* Fat.Por */}
+                <th style={{ ...S.th, fontWeight: 400 }}>
+                  <select style={{ ...S.select, padding: "3px 4px", fontSize: 11, width: 90 }} value={filters.faturado_por || ""} onChange={e => setFilters({ ...filters, faturado_por: e.target.value })}>
+                    <option value="">Todos</option>
+                    {dimFatPor.map(s => <option key={s}>{s}</option>)}
+                  </select>
+                </th>
+                {/* Vl.Bruto */}
+                <th style={{ ...S.th, fontWeight: 400 }}><input style={{ ...S.input, padding: "3px 6px", fontSize: 11, width: 80 }} value={filters.vl_bruto || ""} onChange={e => setFilters({ ...filters, vl_bruto: e.target.value })} /></th>
+                {/* Retido */}
+                <th style={{ ...S.th, fontWeight: 400 }}><input style={{ ...S.input, padding: "3px 6px", fontSize: 11, width: 80 }} value={filters.total_retido || ""} onChange={e => setFilters({ ...filters, total_retido: e.target.value })} /></th>
+                {/* Líquido */}
+                <th style={{ ...S.th, fontWeight: 400 }}><input style={{ ...S.input, padding: "3px 6px", fontSize: 11, width: 80 }} value={filters.vl_liquido || ""} onChange={e => setFilters({ ...filters, vl_liquido: e.target.value })} /></th>
+                {/* Vencimento */}
+                <th style={{ ...S.th, fontWeight: 400 }}><input style={{ ...S.input, padding: "3px 6px", fontSize: 11, width: 80 }} placeholder="dd/mm/aaaa" value={filters.vencimento || ""} onChange={e => setFilters({ ...filters, vencimento: e.target.value })} /></th>
+                {/* Prev.Pag */}
+                <th style={{ ...S.th, fontWeight: 400 }}><input style={{ ...S.input, padding: "3px 6px", fontSize: 11, width: 80 }} placeholder="dd/mm/aaaa" value={filters.prev_pag || ""} onChange={e => setFilters({ ...filters, prev_pag: e.target.value })} /></th>
+                {/* Status */}
+                <th style={{ ...S.th, fontWeight: 400 }}>
+                  <select style={{ ...S.select, padding: "3px 4px", fontSize: 11, width: 120 }} value={filters.status || ""} onChange={e => setFilters({ ...filters, status: e.target.value })}>
+                    <option value="">Todos</option>
+                    {dimStatus.map(s => <option key={s}>{s}</option>)}
+                  </select>
+                </th>
+              </tr>
+            </thead>
             <tbody>
               {items.length === 0 && !loading && (
                 <tr><td colSpan={20} style={{ ...S.td, textAlign: "center", color: "#94a3b8", padding: 40 }}>
@@ -1128,12 +1142,18 @@ function CRUDPage<T extends { id?: number }>({ title, icon, endpoint, columns, e
   const [editing, setEditing] = useState<T | null>(null);
   const [form, setForm] = useState<T>(emptyItem);
   const [delTarget, setDelTarget] = useState<T | null>(null);
+  const [colFilters, setColFilters] = useState<Record<string, string>>({});
   const load = () => {
     if (spLoad) { spLoad().then(data => setItems(data)).catch(() => { if (staticData) setItems(staticData); }); return; }
     if (staticData) { setItems(staticData); return; }
     setItems([]);
   };
   useEffect(() => { load(); }, []);
+  const filtered = items.filter(row => columns.every(c => {
+    const f = colFilters[c.key];
+    if (!f) return true;
+    return String((row as any)[c.key] ?? "").toLowerCase().includes(f.toLowerCase());
+  }));
   const setField = (k: keyof T, v: any) => setForm(prev => ({ ...prev, [k]: v }));
   const save = async () => {
     if (spSave) { await spSave(form); setEditing(null); load(); return; }
@@ -1155,21 +1175,37 @@ function CRUDPage<T extends { id?: number }>({ title, icon, endpoint, columns, e
       </div>}
       <div style={S.card}>
         <div style={S.cardHeader}>
-          <span style={S.cardTitle}>{icon} {title} ({items.length})</span>
+          <span style={S.cardTitle}>{icon} {title} ({filtered.length}{filtered.length !== items.length ? ` de ${items.length}` : ""})</span>
           <div style={{ display: "flex", gap: 6 }}>
-            <button style={btn("#6366f1")} onClick={() => exportCSV(`${endpoint}.csv`, columns, items)} title="Exportar dados para importar no SharePoint">⬇ Exportar CSV</button>
+            {Object.values(colFilters).some(Boolean) && <button style={btn("#64748b")} onClick={() => setColFilters({})}>✕ Limpar filtros</button>}
+            <button style={btn("#6366f1")} onClick={() => exportCSV(`${endpoint}.csv`, columns, filtered)} title="Exportar dados para importar no SharePoint">⬇ Exportar CSV</button>
             {!readOnly && <button style={btn("#059669")} onClick={() => { setForm({ ...emptyItem }); setEditing({ ...emptyItem }); }}>➕ Novo</button>}
           </div>
         </div>
         <div style={{ overflowX: "auto" }}>
           <table style={S.table}>
-            <thead><tr>
-              {!readOnly && <th style={{ ...S.th, width: 70 }}>Ações</th>}
-              {columns.map(c => <th key={c.key} style={S.th}>{c.label}</th>)}
-            </tr></thead>
+            <thead>
+              <tr>
+                {!readOnly && <th style={{ ...S.th, width: 70 }}>Ações</th>}
+                {columns.map(c => <th key={c.key} style={S.th}>{c.label}</th>)}
+              </tr>
+              <tr>
+                {!readOnly && <th style={S.th}></th>}
+                {columns.map(c => (
+                  <th key={c.key} style={{ ...S.th, fontWeight: 400 }}>
+                    <input
+                      value={colFilters[c.key] || ""}
+                      onChange={e => setColFilters(f => ({ ...f, [c.key]: e.target.value }))}
+                      placeholder="Filtrar..."
+                      style={{ ...S.input, padding: "3px 6px", fontSize: 11 }}
+                    />
+                  </th>
+                ))}
+              </tr>
+            </thead>
             <tbody>
-              {items.length === 0 && <tr><td colSpan={columns.length + (readOnly ? 0 : 1)} style={{ ...S.td, textAlign: "center", color: "#94a3b8", padding: 24 }}>Sem registros</td></tr>}
-              {items.map((row, i) => (
+              {filtered.length === 0 && <tr><td colSpan={columns.length + (readOnly ? 0 : 1)} style={{ ...S.td, textAlign: "center", color: "#94a3b8", padding: 24 }}>Sem registros</td></tr>}
+              {filtered.map((row, i) => (
                 <tr key={row.id || i} style={{ background: i % 2 === 0 ? N.card : N.bg }}>
                   {!readOnly && <td style={S.td}><div style={{ display: "flex", gap: 2 }}>
                     <button style={btnSm(N.accent)} title="Editar" onClick={() => { setForm({ ...row }); setEditing(row); }}>✏️</button>
@@ -1257,9 +1293,17 @@ async function logAndDelete(_endpoint: string, _id: number, _resumo: string, _re
 // ===== DRAFTS PAGE =====
 function DraftsPage({ onDraftsChanged }: { onDraftsChanged?: () => void }) {
   const [items, setItems] = useState<Draft[]>([]);
+  const [f, setF] = useState({ codigo: "", data_draft: "", descricao: "", ativo: "" });
 
   const load = () => { setItems(STATIC_DRAFTS as Draft[]); onDraftsChanged?.(); };
   useEffect(() => { load(); }, []);
+
+  const filtered = items.filter(row =>
+    (!f.codigo || String(row.codigo ?? "").includes(f.codigo)) &&
+    (!f.data_draft || (row.data_draft ?? "").includes(f.data_draft)) &&
+    (!f.descricao || (row.descricao ?? "").toLowerCase().includes(f.descricao.toLowerCase())) &&
+    (!f.ativo || (f.ativo === "sim" ? !!row.ativo : !row.ativo))
+  );
 
   return (
     <div style={S.page}>
@@ -1268,21 +1312,34 @@ function DraftsPage({ onDraftsChanged }: { onDraftsChanged?: () => void }) {
       </div>
       <div style={S.card}>
         <div style={S.cardHeader}>
-          <span style={S.cardTitle}>📝 Drafts ({items.length})</span>
+          <span style={S.cardTitle}>📝 Drafts ({filtered.length}{filtered.length !== items.length ? ` de ${items.length}` : ""})</span>
+          {(f.codigo || f.data_draft || f.descricao || f.ativo) && <button style={btn("#64748b")} onClick={() => setF({ codigo: "", data_draft: "", descricao: "", ativo: "" })}>✕ Limpar filtros</button>}
         </div>
         <div style={{ overflowX: "auto" }}>
           <table style={S.table}>
-            <thead><tr>
-              <th style={S.th}>Código</th>
-              <th style={S.th}>Data da Draft</th>
-              <th style={S.th}>Descrição</th>
-              <th style={S.th}>Ativo</th>
-            </tr></thead>
+            <thead>
+              <tr>
+                <th style={S.th}>Código</th>
+                <th style={S.th}>Data da Draft</th>
+                <th style={S.th}>Descrição</th>
+                <th style={S.th}>Ativo</th>
+              </tr>
+              <tr>
+                <th style={{ ...S.th, fontWeight: 400 }}><input value={f.codigo} onChange={e => setF({ ...f, codigo: e.target.value })} placeholder="Filtrar..." style={{ ...S.input, padding: "3px 6px", fontSize: 11 }} /></th>
+                <th style={{ ...S.th, fontWeight: 400 }}><input type="date" value={f.data_draft} onChange={e => setF({ ...f, data_draft: e.target.value })} style={{ ...S.input, padding: "3px 6px", fontSize: 11 }} /></th>
+                <th style={{ ...S.th, fontWeight: 400 }}><input value={f.descricao} onChange={e => setF({ ...f, descricao: e.target.value })} placeholder="Filtrar..." style={{ ...S.input, padding: "3px 6px", fontSize: 11 }} /></th>
+                <th style={{ ...S.th, fontWeight: 400 }}>
+                  <select value={f.ativo} onChange={e => setF({ ...f, ativo: e.target.value })} style={{ ...S.select, padding: "3px 6px", fontSize: 11 }}>
+                    <option value="">Todos</option><option value="sim">✅</option><option value="nao">❌</option>
+                  </select>
+                </th>
+              </tr>
+            </thead>
             <tbody>
-              {items.length === 0 && (
+              {filtered.length === 0 && (
                 <tr><td colSpan={4} style={{ ...S.td, textAlign: "center", color: N.muted, padding: 32 }}>Sem drafts.</td></tr>
               )}
-              {items.map((row, i) => (
+              {filtered.map((row, i) => (
                 <tr key={row.id || i} style={{ background: i % 2 === 0 ? N.card : N.bg }}>
                   <td style={{ ...S.td, fontWeight: 800, fontSize: 14 }}>#{row.codigo}</td>
                   <td style={S.td}>{fmt.date(row.data_draft)}</td>
@@ -1780,30 +1837,38 @@ function ProducaoPage() {
   const [editing, setEditing] = useState<ProducaoItem | null>(null);
   const [form, setForm] = useState<ProducaoItem>({ ...EMPTY_PROD });
   const [delTarget, setDelTarget] = useState<ProducaoItem | null>(null);
-  const [filters, setFilters] = useState<{ wo?: string; mes?: number; ano?: number; ef?: string; cliente?: string }>({});
-  const allRef = useRef<ProducaoItem[]>([]);
-
-  const applyFilters = useCallback((data: ProducaoItem[], f: typeof filters) => {
-    let r = data;
-    if (f.wo)      r = r.filter(x => String(x.WO_Producao ?? '').includes(f.wo!));
-    if (f.mes)     r = r.filter(x => x.Month_Producao === f.mes);
-    if (f.ano)     r = r.filter(x => x.Year_Producao === f.ano);
-    if (f.ef)      r = r.filter(x => x.E_Or_F === f.ef);
-    if (f.cliente) r = r.filter(x => (x.Nome_Cliente_Producao ?? '').toLowerCase().includes(f.cliente!.toLowerCase()));
-    setItems(r);
-  }, []);
+  const [colFilters, setColFilters] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
       const data = await listProducaoFromSP();
-      allRef.current = data;
-      applyFilters(data, filters);
+      setItems(data);
     } catch (e: any) { setError(e.message); }
     finally { setLoading(false); }
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const setColFilter = (k: string, v: string) => setColFilters(f => ({ ...f, [k]: v }));
+  const clearColFilters = () => setColFilters({});
+  const filtered = items.filter(x =>
+    (!colFilters.idwo || String(x.IDWO ?? '').toLowerCase().includes(colFilters.idwo.toLowerCase())) &&
+    (!colFilters.wo || String(x.WO_Producao ?? '').includes(colFilters.wo)) &&
+    (!colFilters.pais || String(x.ID_Country ?? '') === colFilters.pais) &&
+    (!colFilters.mes || x.Month_Producao === +colFilters.mes) &&
+    (!colFilters.ano || String(x.Year_Producao ?? '').includes(colFilters.ano)) &&
+    (!colFilters.ef || x.E_Or_F === colFilters.ef) &&
+    (!colFilters.cliente || (x.Nome_Cliente_Producao ?? '').toLowerCase().includes(colFilters.cliente.toLowerCase())) &&
+    (!colFilters.plataforma || (x.Rig_Producao ?? '').toLowerCase().includes(colFilters.plataforma.toLowerCase())) &&
+    (!colFilters.categoria || (x.Contract_Category_Producao ?? '').toLowerCase().includes(colFilters.categoria.toLowerCase())) &&
+    (!colFilters.di || String(x.DI_Producao ?? '').toLowerCase().includes(colFilters.di.toLowerCase())) &&
+    (!colFilters.invoice || String(x.Number_Of_Invoice_Producao ?? '').includes(colFilters.invoice)) &&
+    (!colFilters.value || String(x.Value_Producao ?? '').includes(colFilters.value)) &&
+    (!colFilters.total || String(x.Total_Producao ?? '').includes(colFilters.total)) &&
+    (!colFilters.wip || String(x.WIP_Producao ?? '').includes(colFilters.wip)) &&
+    (!colFilters.ticket || String(x.Ticket_Medio_Producao ?? '').includes(colFilters.ticket))
+  );
 
   const hf = (k: keyof ProducaoItem, v: any) => {
     setForm(prev => {
@@ -1827,12 +1892,12 @@ function ProducaoPage() {
   };
 
   const stats = useMemo(() => ({
-    count: items.length,
-    value: items.reduce((s, x) => s + (x.Value_Producao ?? 0), 0),
-    total: items.reduce((s, x) => s + (x.Total_Producao ?? 0), 0),
-    wip:   items.reduce((s, x) => s + (x.WIP_Producao ?? 0), 0),
-    inv:   items.reduce((s, x) => s + (x.Invoice_Total_Value_Producao ?? 0), 0),
-  }), [items]);
+    count: filtered.length,
+    value: filtered.reduce((s, x) => s + (x.Value_Producao ?? 0), 0),
+    total: filtered.reduce((s, x) => s + (x.Total_Producao ?? 0), 0),
+    wip:   filtered.reduce((s, x) => s + (x.WIP_Producao ?? 0), 0),
+    inv:   filtered.reduce((s, x) => s + (x.Invoice_Total_Value_Producao ?? 0), 0),
+  }), [filtered]);
 
   const numInput = (label: string, k: keyof ProducaoItem) => (
     <Field label={label}>
@@ -1894,67 +1959,79 @@ function ProducaoPage() {
         ))}
       </div>
 
-      {/* Filtros */}
-      <div style={S.filters}>
-        <div><label style={{ ...S.label, fontSize:10, textTransform:"uppercase" as const }}>WO</label>
-          <input style={{ ...S.input, width:80 }} value={filters.wo||""} onChange={e => setFilters(f => ({...f,wo:e.target.value}))} /></div>
-        <div><label style={{ ...S.label, fontSize:10, textTransform:"uppercase" as const }}>Mês</label>
-          <select style={{ ...S.select, width:90 }} value={filters.mes||""} onChange={e => setFilters(f => ({...f, mes:e.target.value?+e.target.value:undefined}))}>
-            <option value="">Todos</option>
-            {MESES_PT.slice(1).map((m,i) => <option key={i+1} value={i+1}>{m}</option>)}
-          </select></div>
-        <div><label style={{ ...S.label, fontSize:10, textTransform:"uppercase" as const }}>Ano</label>
-          <input type="number" style={{ ...S.input, width:90 }} value={filters.ano||""} placeholder="2026" onChange={e => setFilters(f => ({...f, ano:e.target.value?+e.target.value:undefined}))} /></div>
-        <div><label style={{ ...S.label, fontSize:10, textTransform:"uppercase" as const }}>E/F</label>
-          <select style={{ ...S.select, width:80 }} value={filters.ef||""} onChange={e => setFilters(f => ({...f, ef:e.target.value||undefined}))}>
-            <option value="">Todos</option>
-            <option value="E">E</option>
-            <option value="F">F</option>
-          </select></div>
-        <div><label style={{ ...S.label, fontSize:10, textTransform:"uppercase" as const }}>Cliente</label>
-          <input style={{ ...S.input, width:150 }} value={filters.cliente||""} onChange={e => setFilters(f => ({...f, cliente:e.target.value}))} /></div>
-        <div style={{ display:"flex", gap:5, alignItems:"flex-end" }}>
-          <button style={btn()} onClick={() => applyFilters(allRef.current, filters)}>🔍 Filtrar</button>
-          <button style={btn("#64748b")} onClick={() => { const f = {}; setFilters(f); applyFilters(allRef.current, f); }}>✕</button>
-          <button style={btn("#6366f1")} onClick={load} disabled={loading}>↺ {loading ? "⏳" : ""}</button>
-        </div>
-      </div>
-
       {/* Tabela */}
       <div style={S.card}>
         <div style={S.cardHeader}>
-          <span style={S.cardTitle}>🏭 Production Projects · {items.length} registros {loading && "⏳"}</span>
+          <span style={S.cardTitle}>🏭 Production Projects · {filtered.length}{filtered.length !== items.length ? ` de ${items.length}` : ""} registros {loading && "⏳"}</span>
           <div style={{ display:"flex", gap:5 }}>
+            {Object.values(colFilters).some(Boolean) && <button style={btn("#64748b")} onClick={clearColFilters}>✕ Limpar filtros</button>}
             <button style={btn("#059669")} onClick={() => { const f = { ...EMPTY_PROD }; setForm({ ...f, ...calcProducao(f) }); setEditing(f); }}>➕ Novo</button>
-            <button style={btn("#6366f1")} onClick={() => exportCSV("bd_producao.csv", csvCols, items)}>⬇ CSV</button>
+            <button style={btn("#6366f1")} onClick={() => exportCSV("bd_producao.csv", csvCols, filtered)}>⬇ CSV</button>
+            <button style={btn("#0891b2")} onClick={load} disabled={loading}>↺ {loading ? "⏳" : ""}</button>
           </div>
         </div>
         <div style={{ overflowX:"auto" }}>
           <table style={S.table}>
-            <thead><tr>
-              <th style={{ ...S.th, width:70 }}>Ações</th>
-              <th style={S.th}>IDWO</th>
-              <th style={S.th}>WO</th>
-              <th style={S.th}>País</th>
-              <th style={S.th}>Mês/Ano</th>
-              <th style={S.th}>E/F</th>
-              <th style={S.th}>Cliente</th>
-              <th style={S.th}>Plataforma</th>
-              <th style={S.th}>Categoria</th>
-              <th style={S.th}>DI</th>
-              <th style={S.th}>Invoice</th>
-              <th style={S.th}>Value</th>
-              <th style={S.th}>Total</th>
-              <th style={S.th}>WIP</th>
-              <th style={S.th}>Ticket Médio</th>
-            </tr></thead>
+            <thead>
+              <tr>
+                <th style={{ ...S.th, width:70 }}>Ações</th>
+                <th style={S.th}>IDWO</th>
+                <th style={S.th}>WO</th>
+                <th style={S.th}>País</th>
+                <th style={S.th}>Mês/Ano</th>
+                <th style={S.th}>E/F</th>
+                <th style={S.th}>Cliente</th>
+                <th style={S.th}>Plataforma</th>
+                <th style={S.th}>Categoria</th>
+                <th style={S.th}>DI</th>
+                <th style={S.th}>Invoice</th>
+                <th style={S.th}>Value</th>
+                <th style={S.th}>Total</th>
+                <th style={S.th}>WIP</th>
+                <th style={S.th}>Ticket Médio</th>
+              </tr>
+              <tr>
+                <th style={S.th}></th>
+                <th style={{ ...S.th, fontWeight:400 }}><input value={colFilters.idwo||""} onChange={e => setColFilter("idwo", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:11 }} /></th>
+                <th style={{ ...S.th, fontWeight:400 }}><input value={colFilters.wo||""} onChange={e => setColFilter("wo", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:11 }} /></th>
+                <th style={{ ...S.th, fontWeight:400 }}>
+                  <select value={colFilters.pais||""} onChange={e => setColFilter("pais", e.target.value)} style={{ ...S.select, padding:"3px 6px", fontSize:11 }}>
+                    <option value="">Todos</option>
+                    {Object.entries(PAISES_PROD).map(([id,label]) => <option key={id} value={id}>{label}</option>)}
+                  </select>
+                </th>
+                <th style={{ ...S.th, fontWeight:400 }}>
+                  <div style={{ display:"flex", gap:2 }}>
+                    <select value={colFilters.mes||""} onChange={e => setColFilter("mes", e.target.value)} style={{ ...S.select, padding:"3px 4px", fontSize:11, width:64 }}>
+                      <option value="">Mês</option>
+                      {MESES_PT.slice(1).map((m,i) => <option key={i+1} value={i+1}>{m}</option>)}
+                    </select>
+                    <input value={colFilters.ano||""} onChange={e => setColFilter("ano", e.target.value)} placeholder="Ano" style={{ ...S.input, padding:"3px 6px", fontSize:11, width:60 }} />
+                  </div>
+                </th>
+                <th style={{ ...S.th, fontWeight:400 }}>
+                  <select value={colFilters.ef||""} onChange={e => setColFilter("ef", e.target.value)} style={{ ...S.select, padding:"3px 6px", fontSize:11 }}>
+                    <option value="">Todos</option><option value="E">E</option><option value="F">F</option>
+                  </select>
+                </th>
+                <th style={{ ...S.th, fontWeight:400 }}><input value={colFilters.cliente||""} onChange={e => setColFilter("cliente", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:11 }} /></th>
+                <th style={{ ...S.th, fontWeight:400 }}><input value={colFilters.plataforma||""} onChange={e => setColFilter("plataforma", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:11 }} /></th>
+                <th style={{ ...S.th, fontWeight:400 }}><input value={colFilters.categoria||""} onChange={e => setColFilter("categoria", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:11 }} /></th>
+                <th style={{ ...S.th, fontWeight:400 }}><input value={colFilters.di||""} onChange={e => setColFilter("di", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:11 }} /></th>
+                <th style={{ ...S.th, fontWeight:400 }}><input value={colFilters.invoice||""} onChange={e => setColFilter("invoice", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:11 }} /></th>
+                <th style={{ ...S.th, fontWeight:400 }}><input value={colFilters.value||""} onChange={e => setColFilter("value", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:11 }} /></th>
+                <th style={{ ...S.th, fontWeight:400 }}><input value={colFilters.total||""} onChange={e => setColFilter("total", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:11 }} /></th>
+                <th style={{ ...S.th, fontWeight:400 }}><input value={colFilters.wip||""} onChange={e => setColFilter("wip", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:11 }} /></th>
+                <th style={{ ...S.th, fontWeight:400 }}><input value={colFilters.ticket||""} onChange={e => setColFilter("ticket", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:11 }} /></th>
+              </tr>
+            </thead>
             <tbody>
-              {items.length === 0 && !loading && (
+              {filtered.length === 0 && !loading && (
                 <tr><td colSpan={15} style={{ ...S.td, textAlign:"center", color:"#94a3b8", padding:40 }}>
                   {error ? "Erro ao carregar." : "Nenhum registro. Clique em ↺ para carregar ou ➕ para criar."}
                 </td></tr>
               )}
-              {items.map((row, i) => (
+              {filtered.map((row, i) => (
                 <tr key={row.id ?? i} style={{ background: i%2===0 ? N.card : N.bg }}>
                   <td style={S.td}><div style={{ display:"flex", gap:2 }}>
                     <button style={btnSm(N.accent)} onClick={() => { setForm({...row}); setEditing(row); }}>✏️</button>
