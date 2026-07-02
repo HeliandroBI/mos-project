@@ -1,0 +1,1568 @@
+[
+ {
+  "WO": "1012",
+  "IDWO": "401012",
+  "client_id": 43,
+  "platform_id": 491,
+  "contract_category_id": 9,
+  "country_id": 40,
+  "country": "Portugal"
+ },
+ {
+  "WO": "1011",
+  "IDWO": "401011",
+  "client_id": 27,
+  "platform_id": 395,
+  "contract_category_id": 5,
+  "country_id": 40,
+  "country": "Portugal"
+ },
+ {
+  "WO": "1010",
+  "IDWO": "401010",
+  "client_id": 11,
+  "platform_id": 97,
+  "contract_category_id": 5,
+  "country_id": 40,
+  "country": "Portugal"
+ },
+ {
+  "WO": "1009",
+  "IDWO": "401009",
+  "client_id": 27,
+  "platform_id": 395,
+  "contract_category_id": 5,
+  "country_id": 40,
+  "country": "Portugal"
+ },
+ {
+  "WO": "1006",
+  "IDWO": "401006",
+  "client_id": 20,
+  "platform_id": 507,
+  "contract_category_id": 5,
+  "country_id": 40,
+  "country": "Portugal"
+ },
+ {
+  "WO": "1005",
+  "IDWO": "401005",
+  "client_id": 43,
+  "platform_id": 396,
+  "contract_category_id": 5,
+  "country_id": 40,
+  "country": "Portugal"
+ },
+ {
+  "WO": "1004",
+  "IDWO": "401004",
+  "client_id": 27,
+  "platform_id": 395,
+  "contract_category_id": 5,
+  "country_id": 40,
+  "country": "Portugal"
+ },
+ {
+  "WO": "1003",
+  "IDWO": "401003",
+  "client_id": 20,
+  "platform_id": 507,
+  "contract_category_id": 5,
+  "country_id": 40,
+  "country": "Portugal"
+ },
+ {
+  "WO": "2033",
+  "IDWO": "302033",
+  "client_id": 131,
+  "platform_id": 299,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "2032",
+  "IDWO": "302032",
+  "client_id": 120,
+  "platform_id": 317,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "2030",
+  "IDWO": "302030",
+  "client_id": 131,
+  "platform_id": 301,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "2025",
+  "IDWO": "302025",
+  "client_id": 127,
+  "platform_id": 487,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "2021",
+  "IDWO": "302021",
+  "client_id": 13,
+  "platform_id": 356,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "2020",
+  "IDWO": "302020",
+  "client_id": 20,
+  "platform_id": 490,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "2019",
+  "IDWO": "302019",
+  "client_id": 13,
+  "platform_id": 356,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "2018",
+  "IDWO": "302018",
+  "client_id": 131,
+  "platform_id": 299,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "2016",
+  "IDWO": "302016",
+  "client_id": 131,
+  "platform_id": 297,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "2014",
+  "IDWO": "302014",
+  "client_id": 131,
+  "platform_id": 296,
+  "contract_category_id": 6,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "2013",
+  "IDWO": "302013",
+  "client_id": 131,
+  "platform_id": 296,
+  "contract_category_id": 6,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "2012",
+  "IDWO": "302012",
+  "client_id": 131,
+  "platform_id": 302,
+  "contract_category_id": 6,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "2010",
+  "IDWO": "302010",
+  "client_id": 101,
+  "platform_id": 389,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "2008",
+  "IDWO": "302008",
+  "client_id": 131,
+  "platform_id": 295,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "2007",
+  "IDWO": "302007",
+  "client_id": 115,
+  "platform_id": null,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "2005",
+  "IDWO": "302005",
+  "client_id": 13,
+  "platform_id": 356,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "2004",
+  "IDWO": "302004",
+  "client_id": 131,
+  "platform_id": 304,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "2002",
+  "IDWO": "302002",
+  "client_id": 101,
+  "platform_id": 357,
+  "contract_category_id": 6,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "2000",
+  "IDWO": "302000",
+  "client_id": 131,
+  "platform_id": 302,
+  "contract_category_id": 2,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1999",
+  "IDWO": "301999",
+  "client_id": 131,
+  "platform_id": 304,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1998",
+  "IDWO": "301998",
+  "client_id": 131,
+  "platform_id": 304,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1997",
+  "IDWO": "301997",
+  "client_id": 13,
+  "platform_id": 356,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1996",
+  "IDWO": "301996",
+  "client_id": 13,
+  "platform_id": 356,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1995",
+  "IDWO": "301995",
+  "client_id": 131,
+  "platform_id": 296,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1994",
+  "IDWO": "301994",
+  "client_id": 20,
+  "platform_id": 490,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1993",
+  "IDWO": "301993",
+  "client_id": 37,
+  "platform_id": 484,
+  "contract_category_id": 6,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1992",
+  "IDWO": "301992",
+  "client_id": 129,
+  "platform_id": 302,
+  "contract_category_id": 2,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1988",
+  "IDWO": "301988",
+  "client_id": 131,
+  "platform_id": 295,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1987",
+  "IDWO": "301987",
+  "client_id": 13,
+  "platform_id": 356,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1985",
+  "IDWO": "301985",
+  "client_id": 131,
+  "platform_id": 503,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1983",
+  "IDWO": "301983",
+  "client_id": 131,
+  "platform_id": 296,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1982",
+  "IDWO": "301982",
+  "client_id": 131,
+  "platform_id": 503,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1981",
+  "IDWO": "301981",
+  "client_id": 13,
+  "platform_id": 356,
+  "contract_category_id": 2,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1980",
+  "IDWO": "301980",
+  "client_id": 13,
+  "platform_id": 356,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1979",
+  "IDWO": "301979",
+  "client_id": 131,
+  "platform_id": 503,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1978",
+  "IDWO": "301978",
+  "client_id": 131,
+  "platform_id": 295,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1977",
+  "IDWO": "301977",
+  "client_id": 120,
+  "platform_id": 317,
+  "contract_category_id": 6,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1976",
+  "IDWO": "301976",
+  "client_id": 131,
+  "platform_id": 302,
+  "contract_category_id": 2,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1975",
+  "IDWO": "301975",
+  "client_id": 131,
+  "platform_id": 297,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1974",
+  "IDWO": "301974",
+  "client_id": 120,
+  "platform_id": 317,
+  "contract_category_id": 6,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1973",
+  "IDWO": "301973",
+  "client_id": 131,
+  "platform_id": 302,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1972",
+  "IDWO": "301972",
+  "client_id": 131,
+  "platform_id": 302,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1971",
+  "IDWO": "301971",
+  "client_id": 131,
+  "platform_id": 294,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1970",
+  "IDWO": "301970",
+  "client_id": 13,
+  "platform_id": 356,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1967",
+  "IDWO": "301967",
+  "client_id": 48,
+  "platform_id": 490,
+  "contract_category_id": 6,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1966",
+  "IDWO": "301966",
+  "client_id": 101,
+  "platform_id": 503,
+  "contract_category_id": 6,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1965",
+  "IDWO": "301965",
+  "client_id": 131,
+  "platform_id": 503,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1964",
+  "IDWO": "301964",
+  "client_id": 101,
+  "platform_id": 503,
+  "contract_category_id": 6,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1963",
+  "IDWO": "301963",
+  "client_id": 131,
+  "platform_id": 297,
+  "contract_category_id": 5,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1961",
+  "IDWO": "301961",
+  "client_id": 131,
+  "platform_id": 296,
+  "contract_category_id": 6,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1960",
+  "IDWO": "301960",
+  "client_id": 129,
+  "platform_id": 302,
+  "contract_category_id": 2,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1959",
+  "IDWO": "301959",
+  "client_id": 85,
+  "platform_id": 503,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1955",
+  "IDWO": "301955",
+  "client_id": 131,
+  "platform_id": 294,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1954",
+  "IDWO": "301954",
+  "client_id": 131,
+  "platform_id": 503,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1950",
+  "IDWO": "301950",
+  "client_id": 120,
+  "platform_id": 318,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1947",
+  "IDWO": "301947",
+  "client_id": 37,
+  "platform_id": 484,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1946",
+  "IDWO": "301946",
+  "client_id": 131,
+  "platform_id": 297,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1944",
+  "IDWO": "301944",
+  "client_id": 13,
+  "platform_id": 356,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1943",
+  "IDWO": "301943",
+  "client_id": 13,
+  "platform_id": 356,
+  "contract_category_id": 2,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1942",
+  "IDWO": "301942",
+  "client_id": 85,
+  "platform_id": 327,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1941",
+  "IDWO": "301941",
+  "client_id": 101,
+  "platform_id": 503,
+  "contract_category_id": 6,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1940",
+  "IDWO": "301940",
+  "client_id": 43,
+  "platform_id": 384,
+  "contract_category_id": 5,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1937",
+  "IDWO": "301937",
+  "client_id": 120,
+  "platform_id": 317,
+  "contract_category_id": 6,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1936",
+  "IDWO": "301936",
+  "client_id": 120,
+  "platform_id": 195,
+  "contract_category_id": 6,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1934",
+  "IDWO": "301934",
+  "client_id": 115,
+  "platform_id": 295,
+  "contract_category_id": 6,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1931",
+  "IDWO": "301931",
+  "client_id": 13,
+  "platform_id": 356,
+  "contract_category_id": 2,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1930",
+  "IDWO": "301930",
+  "client_id": 131,
+  "platform_id": 503,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1929",
+  "IDWO": "301929",
+  "client_id": 131,
+  "platform_id": 294,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1926",
+  "IDWO": "301926",
+  "client_id": 131,
+  "platform_id": 503,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1922",
+  "IDWO": "301922",
+  "client_id": 131,
+  "platform_id": 304,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1921",
+  "IDWO": "301921",
+  "client_id": 13,
+  "platform_id": 356,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1920",
+  "IDWO": "301920",
+  "client_id": 131,
+  "platform_id": 296,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1918",
+  "IDWO": "301918",
+  "client_id": 131,
+  "platform_id": 304,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1917",
+  "IDWO": "301917",
+  "client_id": 131,
+  "platform_id": 299,
+  "contract_category_id": 2,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1916",
+  "IDWO": "301916",
+  "client_id": 131,
+  "platform_id": 304,
+  "contract_category_id": 2,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1915",
+  "IDWO": "301915",
+  "client_id": 131,
+  "platform_id": 304,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1914",
+  "IDWO": "301914",
+  "client_id": 131,
+  "platform_id": 492,
+  "contract_category_id": 2,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1913",
+  "IDWO": "301913",
+  "client_id": 131,
+  "platform_id": 296,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1911",
+  "IDWO": "301911",
+  "client_id": 131,
+  "platform_id": 492,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1910",
+  "IDWO": "301910",
+  "client_id": 131,
+  "platform_id": 295,
+  "contract_category_id": 6,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1909",
+  "IDWO": "301909",
+  "client_id": 131,
+  "platform_id": 492,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1907",
+  "IDWO": "301907",
+  "client_id": 131,
+  "platform_id": 297,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1904",
+  "IDWO": "301904",
+  "client_id": 131,
+  "platform_id": 296,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1903",
+  "IDWO": "301903",
+  "client_id": 131,
+  "platform_id": 503,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1902",
+  "IDWO": "301902",
+  "client_id": 131,
+  "platform_id": 302,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1901",
+  "IDWO": "301901",
+  "client_id": 13,
+  "platform_id": 356,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1898",
+  "IDWO": "301898",
+  "client_id": 13,
+  "platform_id": 356,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1897",
+  "IDWO": "301897",
+  "client_id": 131,
+  "platform_id": 492,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1895",
+  "IDWO": "301895",
+  "client_id": 131,
+  "platform_id": 296,
+  "contract_category_id": 2,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1892",
+  "IDWO": "301892",
+  "client_id": 131,
+  "platform_id": 492,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1887",
+  "IDWO": "301887",
+  "client_id": 131,
+  "platform_id": 296,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1886",
+  "IDWO": "301886",
+  "client_id": 131,
+  "platform_id": 299,
+  "contract_category_id": 2,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1880",
+  "IDWO": "301880",
+  "client_id": 131,
+  "platform_id": 304,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1877",
+  "IDWO": "301877",
+  "client_id": 131,
+  "platform_id": 299,
+  "contract_category_id": 6,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1876",
+  "IDWO": "301876",
+  "client_id": 131,
+  "platform_id": 294,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1875",
+  "IDWO": "301875",
+  "client_id": 131,
+  "platform_id": 295,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1874",
+  "IDWO": "301874",
+  "client_id": 131,
+  "platform_id": 303,
+  "contract_category_id": 2,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1872",
+  "IDWO": "301872",
+  "client_id": 131,
+  "platform_id": 304,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1870",
+  "IDWO": "301870",
+  "client_id": 131,
+  "platform_id": 304,
+  "contract_category_id": 2,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1869",
+  "IDWO": "301869",
+  "client_id": 131,
+  "platform_id": 297,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1867",
+  "IDWO": "301867",
+  "client_id": 131,
+  "platform_id": 492,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1866",
+  "IDWO": "301866",
+  "client_id": 13,
+  "platform_id": 356,
+  "contract_category_id": 2,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1865",
+  "IDWO": "301865",
+  "client_id": 131,
+  "platform_id": 304,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1864",
+  "IDWO": "301864",
+  "client_id": 131,
+  "platform_id": 303,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1863",
+  "IDWO": "301863",
+  "client_id": 131,
+  "platform_id": 492,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1862",
+  "IDWO": "301862",
+  "client_id": 131,
+  "platform_id": 299,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1861",
+  "IDWO": "301861",
+  "client_id": 131,
+  "platform_id": 304,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1858",
+  "IDWO": "301858",
+  "client_id": 131,
+  "platform_id": 296,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1857",
+  "IDWO": "301857",
+  "client_id": 131,
+  "platform_id": 295,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1856",
+  "IDWO": "301856",
+  "client_id": 101,
+  "platform_id": 503,
+  "contract_category_id": 5,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1855",
+  "IDWO": "301855",
+  "client_id": 101,
+  "platform_id": 503,
+  "contract_category_id": 5,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1854",
+  "IDWO": "301854",
+  "client_id": 131,
+  "platform_id": 304,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1850",
+  "IDWO": "301850",
+  "client_id": 131,
+  "platform_id": 299,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1849",
+  "IDWO": "301849",
+  "client_id": 85,
+  "platform_id": 326,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1848",
+  "IDWO": "301848",
+  "client_id": 77,
+  "platform_id": 503,
+  "contract_category_id": 5,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1847",
+  "IDWO": "301847",
+  "client_id": 131,
+  "platform_id": 297,
+  "contract_category_id": 2,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1846",
+  "IDWO": "301846",
+  "client_id": 131,
+  "platform_id": 503,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1845",
+  "IDWO": "301845",
+  "client_id": 131,
+  "platform_id": 302,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1844",
+  "IDWO": "301844",
+  "client_id": 131,
+  "platform_id": 503,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1843",
+  "IDWO": "301843",
+  "client_id": 131,
+  "platform_id": 297,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1840",
+  "IDWO": "301840",
+  "client_id": 117,
+  "platform_id": 299,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1839",
+  "IDWO": "301839",
+  "client_id": 13,
+  "platform_id": 356,
+  "contract_category_id": 6,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1838",
+  "IDWO": "301838",
+  "client_id": 131,
+  "platform_id": 304,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1837",
+  "IDWO": "301837",
+  "client_id": 101,
+  "platform_id": 503,
+  "contract_category_id": 6,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1836",
+  "IDWO": "301836",
+  "client_id": 131,
+  "platform_id": 302,
+  "contract_category_id": 6,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1835",
+  "IDWO": "301835",
+  "client_id": 131,
+  "platform_id": 303,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1833",
+  "IDWO": "301833",
+  "client_id": 13,
+  "platform_id": 356,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1832",
+  "IDWO": "301832",
+  "client_id": 131,
+  "platform_id": 304,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1831",
+  "IDWO": "301831",
+  "client_id": 131,
+  "platform_id": 304,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1830",
+  "IDWO": "301830",
+  "client_id": 131,
+  "platform_id": 304,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1829",
+  "IDWO": "301829",
+  "client_id": 116,
+  "platform_id": 503,
+  "contract_category_id": 6,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1828",
+  "IDWO": "301828",
+  "client_id": 131,
+  "platform_id": 304,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1826",
+  "IDWO": "301826",
+  "client_id": 13,
+  "platform_id": 356,
+  "contract_category_id": 2,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1824",
+  "IDWO": "301824",
+  "client_id": 13,
+  "platform_id": 356,
+  "contract_category_id": 2,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1823",
+  "IDWO": "301823",
+  "client_id": 115,
+  "platform_id": 295,
+  "contract_category_id": 6,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1822",
+  "IDWO": "301822",
+  "client_id": 131,
+  "platform_id": 304,
+  "contract_category_id": 2,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1820",
+  "IDWO": "301820",
+  "client_id": 13,
+  "platform_id": 356,
+  "contract_category_id": 2,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1817",
+  "IDWO": "301817",
+  "client_id": 115,
+  "platform_id": 295,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1816",
+  "IDWO": "301816",
+  "client_id": 43,
+  "platform_id": 384,
+  "contract_category_id": 6,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1814",
+  "IDWO": "301814",
+  "client_id": 13,
+  "platform_id": 356,
+  "contract_category_id": 5,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1811",
+  "IDWO": "301811",
+  "client_id": 43,
+  "platform_id": 503,
+  "contract_category_id": 5,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1810",
+  "IDWO": "301810",
+  "client_id": 13,
+  "platform_id": 356,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1807",
+  "IDWO": "301807",
+  "client_id": 43,
+  "platform_id": 384,
+  "contract_category_id": 2,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1806",
+  "IDWO": "301806",
+  "client_id": 131,
+  "platform_id": 304,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1802",
+  "IDWO": "301802",
+  "client_id": 131,
+  "platform_id": 299,
+  "contract_category_id": 3,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1746",
+  "IDWO": "301746",
+  "client_id": 13,
+  "platform_id": 356,
+  "contract_category_id": 2,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1671",
+  "IDWO": "301671",
+  "client_id": 131,
+  "platform_id": 304,
+  "contract_category_id": 2,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1532",
+  "IDWO": "301532",
+  "client_id": 131,
+  "platform_id": 304,
+  "contract_category_id": 5,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1021",
+  "IDWO": "301021",
+  "client_id": 28,
+  "platform_id": 94,
+  "contract_category_id": 6,
+  "country_id": 30,
+  "country": "México"
+ },
+ {
+  "WO": "1063",
+  "IDWO": "201063",
+  "client_id": 131,
+  "platform_id": 303,
+  "contract_category_id": 3,
+  "country_id": 20,
+  "country": "USA"
+ },
+ {
+  "WO": "1062",
+  "IDWO": "201062",
+  "client_id": 20,
+  "platform_id": 422,
+  "contract_category_id": 3,
+  "country_id": 20,
+  "country": "USA"
+ },
+ {
+  "WO": "1061",
+  "IDWO": "201061",
+  "client_id": 20,
+  "platform_id": 490,
+  "contract_category_id": 3,
+  "country_id": 20,
+  "country": "USA"
+ },
+ {
+  "WO": "1060",
+  "IDWO": "201060",
+  "client_id": 20,
+  "platform_id": 490,
+  "contract_category_id": 3,
+  "country_id": 20,
+  "country": "USA"
+ },
+ {
+  "WO": "1059",
+  "IDWO": "201059",
+  "client_id": 130,
+  "platform_id": 399,
+  "contract_category_id": 6,
+  "country_id": 20,
+  "country": "USA"
+ },
+ {
+  "WO": "1058",
+  "IDWO": "201058",
+  "client_id": 126,
+  "platform_id": 393,
+  "contract_category_id": 3,
+  "country_id": 20,
+  "country": "USA"
+ },
+ {
+  "WO": "1057",
+  "IDWO": "201057",
+  "client_id": 126,
+  "platform_id": 393,
+  "contract_category_id": 3,
+  "country_id": 20,
+  "country": "USA"
+ },
+ {
+  "WO": "1054",
+  "IDWO": "201054",
+  "client_id": 52,
+  "platform_id": 312,
+  "contract_category_id": 6,
+  "country_id": 20,
+  "country": "USA"
+ },
+ {
+  "WO": "1052",
+  "IDWO": "201052",
+  "client_id": 185,
+  "platform_id": 312,
+  "contract_category_id": 3,
+  "country_id": 20,
+  "country": "USA"
+ },
+ {
+  "WO": "1049",
+  "IDWO": "201049",
+  "client_id": 20,
+  "platform_id": 392,
+  "contract_category_id": 6,
+  "country_id": 20,
+  "country": "USA"
+ },
+ {
+  "WO": "1013",
+  "IDWO": "201013",
+  "client_id": 173,
+  "platform_id": 430,
+  "contract_category_id": 6,
+  "country_id": 20,
+  "country": "USA"
+ },
+ {
+  "WO": "3777",
+  "IDWO": "103777",
+  "client_id": 20,
+  "platform_id": 37,
+  "contract_category_id": 2,
+  "country_id": 10,
+  "country": "Brazil"
+ },
+ {
+  "WO": "3768",
+  "IDWO": "103768",
+  "client_id": 20,
+  "platform_id": 37,
+  "contract_category_id": 2,
+  "country_id": 10,
+  "country": "Brazil"
+ },
+ {
+  "WO": "3766",
+  "IDWO": "103766",
+  "client_id": 20,
+  "platform_id": 37,
+  "contract_category_id": 2,
+  "country_id": 10,
+  "country": "Brazil"
+ },
+ {
+  "WO": "3737",
+  "IDWO": "103737",
+  "client_id": 20,
+  "platform_id": 37,
+  "contract_category_id": 2,
+  "country_id": 10,
+  "country": "Brazil"
+ },
+ {
+  "WO": "3732",
+  "IDWO": "103732",
+  "client_id": 43,
+  "platform_id": 144,
+  "contract_category_id": 6,
+  "country_id": 10,
+  "country": "Brazil"
+ },
+ {
+  "WO": "3650",
+  "IDWO": "103650",
+  "client_id": 64,
+  "platform_id": 61,
+  "contract_category_id": 6,
+  "country_id": 10,
+  "country": "Brazil"
+ }
+]
