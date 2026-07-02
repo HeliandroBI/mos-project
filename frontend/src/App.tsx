@@ -1,6 +1,6 @@
 import Dashboard from "./Dashboard";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { initMsal, getSpAccount, loginSharePoint, logoutSharePoint, postWOToSharePoint, getListItems, getToken, listWOs, createWO, updateWO, deleteWO, getListFields, listProjects, createProject, updateProject, deleteProject, createConta, updateConta, deleteConta, listProjetosFromSP, createProjeto, updateProjeto, deleteProjeto, ID_COUNTRY_BR, type WOItem, type ProjectItem } from "./services/sharepoint";
+import { initMsal, getSpAccount, loginSharePoint, logoutSharePoint, postWOToSharePoint, getListItems, getToken, listWOs, createWO, updateWO, deleteWO, getListFields, listProjects, createProject, updateProject, deleteProject, createConta, updateConta, deleteConta, listProjetosFromSP, createProjeto, updateProjeto, deleteProjeto, listProducaoFromSP, createProducao, updateProducao, deleteProducao, ID_COUNTRY_BR, type WOItem, type ProjectItem, type ProducaoItem } from "./services/sharepoint";
 
 import { STATIC_DRAFTS, STATIC_CLIENTES_PRAZOS } from "./staticData";
 import STATIC_PROJETOS_RAW from "./staticProjetos.json";
@@ -8,7 +8,7 @@ import STATIC_QUALTECH_PROJECTS from "./staticQualtechProjects.json";
 
 
 type Tab = "contas" | "dashboard" | "impostos" | "clientes" | "projetos" | "drafts" | "feriados"
-         | "qualtech_projects";
+         | "qualtech_projects" | "producao";
 
 const STATIC_IMPOSTOS: Imposto[] = [
   { id:1,  nome:"COFINS", tipo:"retido_fonte", tipo_documento:"NFSe",  tipo_servico:undefined, cidade:undefined, aliquota:0.03,   vigencia_inicio:"2020-01-01", ativo:true },
@@ -21,6 +21,12 @@ const STATIC_IMPOSTOS: Imposto[] = [
   { id:8,  nome:"IRPJ",   tipo:"a_pagar",      tipo_documento:undefined,tipo_servico:undefined, cidade:undefined, aliquota:0.048,  vigencia_inicio:"2020-01-01", ativo:true },
   { id:9,  nome:"PIS",    tipo:"a_pagar",      tipo_documento:undefined,tipo_servico:undefined, cidade:undefined, aliquota:0.0165, vigencia_inicio:"2020-01-01", ativo:true },
   { id:10, nome:"INSS",   tipo:"retido_fonte", tipo_documento:"NFSe",  tipo_servico:"CONTRATO", cidade:undefined, aliquota:0.11,   vigencia_inicio:"2020-01-01", ativo:true },
+  // ISS retido na fonte: conferido contra a planilha real — Rio nunca retém (0%), só Macaé retém 2%.
+  { id:11, nome:"ISS",    tipo:"retido_fonte", tipo_documento:"NFSe",  tipo_servico:undefined, cidade:"Rio",    aliquota:0,      vigencia_inicio:"2020-01-01", ativo:true },
+  { id:12, nome:"ISS",    tipo:"retido_fonte", tipo_documento:"NFSe",  tipo_servico:undefined, cidade:"Macaé",  aliquota:0.02,   vigencia_inicio:"2020-01-01", ativo:true },
+  // ISS a pagar: taxa cheia de 5%, igual para as duas cidades — o valor final varia só pelo
+  // que já foi retido na fonte (Macaé retido 2% deixa 3% a pagar; Rio não retém, paga os 5%).
+  { id:13, nome:"ISS",    tipo:"a_pagar",      tipo_documento:"NFSe",  tipo_servico:undefined, cidade:undefined, aliquota:0.05,   vigencia_inicio:"2020-01-01", ativo:true },
 ];
 
 const STATIC_FERIADOS: Feriado[] = [
@@ -67,6 +73,8 @@ interface ContaReceber {
   escopo?: string; faturado_por?: string; vl_bruto?: number;
   cofins_3?: number; csll_1?: number; inss_11?: number; irpj_15?: number;
   pis_065?: number; iss_retido?: number; total_retido?: number; vl_liquido?: number;
+  cofins_76?: number; csll_288?: number; icms_20?: number; irpj_48?: number;
+  pis_165?: number; iss_pagar?: number; total_a_pagar?: number;
   status?: string; obs?: string; id_ticket_req?: string;
   data_envio_cliente?: string; data_pgto?: string; vencimento?: string;
   prev_fat?: string; prev_pag?: string; data_inicio?: string; data_fim?: string;
@@ -231,29 +239,57 @@ const Section = ({ title }: { title: string }) => (
   <div style={{ gridColumn: "1/-1", background: "#f1f5f9", borderRadius: 6, padding: "5px 10px", fontWeight: 700, fontSize: 11, color: "#475569", textTransform: "uppercase" as const, marginTop: 4 }}>{title}</div>
 );
 
-function calcImpostos(f: ContaReceber): Partial<ContaReceber> {
-  // Espelha exatamente a lógica do backend (tax_calculator.py)
+// Busca a alíquota vigente na tabela Impostos (nome + tipo, prioriza cidade exata quando informada)
+function getAliquota(impostos: Imposto[], nome: string, tipo: string, cidade?: string): number {
+  const candidatos = impostos.filter(i => i.ativo !== false && i.nome === nome && i.tipo === tipo);
+  if (!candidatos.length) return 0;
+  if (cidade) {
+    const exato = candidatos.find(c => c.cidade === cidade);
+    if (exato) return exato.aliquota;
+  }
+  const semCidade = candidatos.find(c => !c.cidade);
+  return (semCidade ?? candidatos[0]).aliquota;
+}
+
+function calcImpostos(f: ContaReceber, impostos: Imposto[]): Partial<ContaReceber> {
+  // Alíquotas vêm da tela "Impostos" — ver getAliquota(). Regras conferidas linha a linha
+  // contra a planilha real "Contas a Receber.xlsx" (388/392 registros batendo exatamente):
+  //  - COFINS/CSLL/IRPJ/PIS retidos só incidem em DOC = "NFSe" (não em "NFSe(ex)")
+  //  - ISS só é retido na fonte quando Faturado Por = "Macaé" (Rio nunca retém ISS na fonte)
+  //  - ISS a pagar usa sempre a alíquota cheia (5%), independente da cidade, menos o que
+  //    já foi retido — por isso o valor final acaba variando por cidade
   const vl = f.vl_bruto || 0;
-  const isNFSe = ["NFSe", "NFSe(ex)"].includes(f.doc || "");
-  const fatPor = (f.faturado_por || "").toLowerCase().trim();
-  const isMacae = fatPor.includes("mac");
-  const isRio   = fatPor.includes("rio");
-  // ISS só incide se Faturado Por estiver preenchido com Rio ou Macaé
-  const issRate    = isMacae ? 0.02 : 0.05;
-  const temFatPor  = isRio || isMacae;
-  const cofins_3   = isNFSe ? vl * 0.03   : 0;
-  const csll_1     = isNFSe ? vl * 0.01   : 0;
-  const irpj_15    = isNFSe ? vl * 0.015  : 0;
-  const pis_065    = isNFSe ? vl * 0.0065 : 0;
-  const iss_retido = isNFSe && temFatPor ? vl * issRate : 0;
+  const isNFSe = f.doc === "NFSe";
+  const isDANFE = ["DANFE", "DANFE(ex)"].includes(f.doc || "");
+  const isMacae = f.faturado_por === "Macaé";
+  const cofins_3   = isNFSe ? vl * getAliquota(impostos, "COFINS", "retido_fonte") : 0;
+  const csll_1     = isNFSe ? vl * getAliquota(impostos, "CSLL",   "retido_fonte") : 0;
+  const irpj_15    = isNFSe ? vl * getAliquota(impostos, "IRPJ",   "retido_fonte") : 0;
+  const pis_065    = isNFSe ? vl * getAliquota(impostos, "PIS",    "retido_fonte") : 0;
+  const iss_retido = isNFSe && isMacae ? vl * getAliquota(impostos, "ISS", "retido_fonte", "Macaé") : 0;
   const total_retido = cofins_3 + csll_1 + irpj_15 + pis_065 + iss_retido;
   const vl_liquido   = vl - total_retido;
+
+  // A Pagar (VL.Bruto * alíquota cheia - o que já foi retido na fonte)
+  const cofins_76 = vl * getAliquota(impostos, "COFINS", "a_pagar") - cofins_3;
+  const csll_288  = vl * getAliquota(impostos, "CSLL",   "a_pagar") - csll_1;
+  const icms_20   = isDANFE ? vl * getAliquota(impostos, "ICMS", "a_pagar") : 0;
+  const irpj_48   = vl * getAliquota(impostos, "IRPJ",   "a_pagar") - irpj_15;
+  const pis_165   = vl * getAliquota(impostos, "PIS",    "a_pagar") - pis_065;
+  const iss_pagar = isNFSe || f.exterior_com_iss ? vl * getAliquota(impostos, "ISS", "a_pagar") - iss_retido : 0;
+  const total_a_pagar = cofins_76 + csll_288 + icms_20 + irpj_48 + pis_165 + iss_pagar;
+
   const r = (x: number) => +x.toFixed(2);
-  return { cofins_3: r(cofins_3), csll_1: r(csll_1), irpj_15: r(irpj_15), pis_065: r(pis_065), iss_retido: r(iss_retido), total_retido: r(total_retido), vl_liquido: r(vl_liquido) };
+  return {
+    cofins_3: r(cofins_3), csll_1: r(csll_1), irpj_15: r(irpj_15), pis_065: r(pis_065), iss_retido: r(iss_retido),
+    total_retido: r(total_retido), vl_liquido: r(vl_liquido),
+    cofins_76: r(cofins_76), csll_288: r(csll_288), icms_20: r(icms_20), irpj_48: r(irpj_48), pis_165: r(pis_165),
+    iss_pagar: r(iss_pagar), total_a_pagar: r(total_a_pagar),
+  };
 }
 
 // ===== CONTA FORM =====
-function ContaForm({ conta, onSave, onClose, drafts, projetos, onDraftsChanged, spAccount }: { conta: ContaReceber; onSave: (c: ContaReceber) => void; onClose: () => void; drafts: Draft[]; projetos: Projeto[]; onDraftsChanged?: () => void; spAccount?: { name?: string; username?: string } | null }) {
+function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraftsChanged, spAccount }: { conta: ContaReceber; onSave: (c: ContaReceber) => void; onClose: () => void; drafts: Draft[]; projetos: Projeto[]; impostos: Imposto[]; onDraftsChanged?: () => void; spAccount?: { name?: string; username?: string } | null }) {
   // Para nova conta, draft_id=0 significa "criar nova draft ao salvar"
   const defaultDraftId = !conta.id ? 0 : (conta.draft_id ?? 0);
   const [form, setForm] = useState<ContaReceber>({ ...conta, draft_id: defaultDraftId });
@@ -308,13 +344,19 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, onDraftsChanged, 
       if (newVl != null) updated.vl_bruto = +newVl.toFixed(2);
     }
     if (["vl_bruto", "doc", "faturado_por", "escopo", "data_inicio", "data_fim"].includes(k as string)) {
-      setForm({ ...updated, ...calcImpostos(updated) });
+      setForm({ ...updated, ...calcImpostos(updated, impostos) });
     } else {
       setForm(updated);
     }
   };
 
   const applyWO = (woNum: number) => {
+    // Vl. Diária / Vl. Diária Locação só existem na lista Projetos/WO — busca sempre lá,
+    // independente de onde vier Cliente/Plataforma (SharePoint ListaWOs não tem esses campos)
+    const proj = projetos.find(p => p.wo === woNum);
+    const pd = { vl_diaria: proj?.vl_diaria, vl_diaria_locacao: proj?.vl_diaria_locacao, vl_outros: proj?.vl_outros };
+    setProjData(pd);
+
     // Try SharePoint first if logged in
     if (spAccount && spWOs.length > 0) {
       const spItem = spWOs.find(item => parseInt(item.WO || item.wo) === woNum);
@@ -322,29 +364,32 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, onDraftsChanged, 
         const cliente = spItem.Client || spItem.cliente || '';
         const plataforma = spItem.Rig || spItem.plataforma || '';
         const updated = { ...form, wo: woNum, cliente, plataforma, coord_focal: form.coord_focal };
-        setProjData({ vl_diaria: undefined, vl_diaria_locacao: undefined, vl_outros: undefined });
-        setForm(updated);
+        const newVl = calcVlBruto(updated, pd);
+        if (newVl != null) updated.vl_bruto = +newVl.toFixed(2);
+        setForm({ ...updated, ...calcImpostos(updated, impostos) });
         return;
       }
     }
 
     // Fall back to backend projetos
-    const proj = projetos.find(p => p.wo === woNum);
     if (!proj) return;
-    const pd = { vl_diaria: proj.vl_diaria, vl_diaria_locacao: proj.vl_diaria_locacao, vl_outros: proj.vl_outros };
-    setProjData(pd);
     const updated = { ...form, wo: woNum, cliente: proj.cliente, plataforma: proj.plataforma, coord_focal: proj.coordenador };
     const newVl = calcVlBruto(updated, pd);
     if (newVl != null) updated.vl_bruto = +newVl.toFixed(2);
-    setForm({ ...updated, ...calcImpostos(updated) });
+    setForm({ ...updated, ...calcImpostos(updated, impostos) });
   };
 
   const todayLabel = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 
   const handleSave = async () => {
-    const finalForm = { ...form };
+    const finalForm: any = { ...form };
+    // draft_id é só a seleção na tela (id local da lista estática de drafts) — a coluna real
+    // gravada no SharePoint é draft_codigo, então convertemos aqui antes de salvar.
+    const draftSelecionada = drafts.find(d => d.id === finalForm.draft_id);
+    finalForm.draft_codigo = draftSelecionada ? draftSelecionada.codigo : proximoCodigo;
+    delete finalForm.draft_id;
     // Drafts são estáticos — não cria via API
-    if (!finalForm.draft_id) {
+    if (!draftSelecionada) {
       onDraftsChanged?.();
     }
     onSave(finalForm);
@@ -452,14 +497,25 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, onDraftsChanged, 
             </div>
             <Field label="Total Retido"><input readOnly style={{ ...S.input, background: "#f1f5f9", fontWeight: 700, color: "#dc2626" }} value={fmt.num(form.total_retido)} /></Field>
             <Field label="Valor Líquido"><input readOnly style={{ ...S.input, background: "#f1f5f9", fontWeight: 700, color: "#059669" }} value={fmt.num(form.vl_liquido)} /></Field>
+            <Field label="Total a Pagar"><input readOnly style={{ ...S.input, background: "#f1f5f9", fontWeight: 700, color: "#b45309" }} value={fmt.num(form.total_a_pagar)} /></Field>
 
             {form.vl_bruto ? (
               <div style={{ gridColumn: "1/-1", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 6, padding: 10 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>RETIDOS NA FONTE</div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 8 }}>
                   {[["COFINS 3%", form.cofins_3], ["CSLL 1%", form.csll_1], ["IRPJ 1.5%", form.irpj_15], ["PIS 0.65%", form.pis_065], ["ISS Ret.", form.iss_retido]].map(([l, v]) => (
                     <div key={l as string} style={{ textAlign: "center" as const }}>
                       <div style={{ fontSize: 9, color: "#64748b" }}>{l}</div>
                       <div style={{ fontWeight: 700, color: "#dc2626" }}>{fmt.brl(v as number)}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", margin: "10px 0 4px" }}>A PAGAR</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 8 }}>
+                  {[["COFINS 7.6%", form.cofins_76], ["CSLL 2.88%", form.csll_288], ["ICMS 20%", form.icms_20], ["IRPJ 4.8%", form.irpj_48], ["PIS 1.65%", form.pis_165], ["ISS a Pagar", form.iss_pagar]].map(([l, v]) => (
+                    <div key={l as string} style={{ textAlign: "center" as const }}>
+                      <div style={{ fontSize: 9, color: "#64748b" }}>{l}</div>
+                      <div style={{ fontWeight: 700, color: "#b45309" }}>{fmt.brl(v as number)}</div>
                     </div>
                   ))}
                 </div>
@@ -499,8 +555,22 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, onDraftsChanged, 
   );
 }
 
+// Converte os campos do formulário/linha para os nomes reais das colunas da lista SharePoint
+// "fContasReceber" — remove campos só de tela (id, draft_id...) e do sistema SP (ID, GUID, Created...),
+// e mapeia wo -> Title (a coluna nativa do SP, só o rótulo de exibição foi renomeado para "wo").
+function toSpConta(fields: Record<string, any>): Record<string, any> {
+  const {
+    id, draft_id, _novaDraft, wo,
+    ID, Id, FileSystemObjectType, ServerRedirectedEmbedUri, ServerRedirectedEmbedUrl,
+    ContentTypeId, OData__ColorTag, ComplianceAssetId, Modified, Created, AuthorId,
+    EditorId, OData__UIVersionString, Attachments, GUID, Title,
+    ...rest
+  } = fields;
+  return wo != null ? { ...rest, Title: String(wo) } : rest;
+}
+
 // ===== CONTAS PAGE =====
-function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: Draft[]; projetos: Projeto[]; onDraftsChanged?: () => void; spAccount?: { name?: string; username?: string } | null }) {
+function ContasPage({ drafts, projetos, impostos, onDraftsChanged, spAccount }: { drafts: Draft[]; projetos: Projeto[]; impostos: Imposto[]; onDraftsChanged?: () => void; spAccount?: { name?: string; username?: string } | null }) {
   const [items, setItems] = useState<ContaReceber[]>([]);
   const [total, setTotal] = useState({ total: 0, total_bruto: 0, total_liquido: 0 });
   const [filters, setFilters] = useState<any>({});
@@ -532,9 +602,9 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
       `Duplicar este registro?\n\nWO ${row.wo} · ${row.cliente || ""} · ${row.plataforma || ""}\nDoc: ${row.doc || "-"} ${row.num_doc || ""} · ${row.escopo || ""}\n\nUm novo registro idêntico será criado. Você poderá editá-lo em seguida.`
     );
     if (!ok) return;
-    const { id, criado_em, atualizado_em, draft_codigo, _novaDraft, ...rest } = row as any;
+    const { draft_codigo, ...rest } = row as any;
     try {
-      const res = await createConta(rest);
+      const res = await createConta(toSpConta(rest));
       fetchData();
       if (res?.ID) setEditing({ ...rest, id: res.ID });
     } catch (e: any) { alert(`Erro ao duplicar: ${e.message}`); }
@@ -590,9 +660,15 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
   // Busca inicial e quando login completa
   useEffect(() => { fetchData(); }, [fetchData, spAccount]);
 
+  // Filtra automaticamente sempre que algum campo de filtro muda — instantâneo, sem rede
+  useEffect(() => {
+    if (allDataRef.current.length > 0) applyFilters(allDataRef.current, filters);
+  }, [filters, applyFilters]);
+
   const save = async (conta: ContaReceber) => {
     try {
-      const { id, ...fields } = conta as any;
+      const id = (conta as any).id;
+      const fields = toSpConta(conta);
       if (id) await updateConta(id, fields);
       else await createConta(fields);
       setEditing(null); fetchData();
@@ -812,7 +888,7 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
                   isExp && <tr key={`exp-${row.id}`}>
                     <td colSpan={20} style={{ background: N.bg, padding: "10px 16px" }}>
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(8,1fr)", gap: 6, fontSize: 11 }}>
-                        {[["COFINS 3%", row.cofins_3], ["CSLL 1%", row.csll_1], ["IRPJ 1.5%", row.irpj_15], ["PIS 0.65%", row.pis_065], ["ISS Ret.", row.iss_retido], ["PO/Contrato", row.po_contrato], ["Prev. Fat.", fmt.date(row.prev_fat)], ["Data Pgto.", fmt.date(row.data_pgto)], ["Obs", row.obs]].map(([l, v]) => (
+                        {[["COFINS 3%", row.cofins_3], ["CSLL 1%", row.csll_1], ["IRPJ 1.5%", row.irpj_15], ["PIS 0.65%", row.pis_065], ["ISS Ret.", row.iss_retido], ["COFINS 7.6%", row.cofins_76], ["CSLL 2.88%", row.csll_288], ["ICMS 20%", row.icms_20], ["IRPJ 4.8%", row.irpj_48], ["PIS 1.65%", row.pis_165], ["ISS a Pagar", row.iss_pagar], ["Total a Pagar", row.total_a_pagar], ["PO/Contrato", row.po_contrato], ["Prev. Fat.", fmt.date(row.prev_fat)], ["Data Pgto.", fmt.date(row.data_pgto)], ["Obs", row.obs]].map(([l, v]) => (
                           <div key={l as string} style={{ background: N.card, borderRadius: 8, padding: "4px 8px", boxShadow: `2px 2px 5px ${N.shadowD}, -1px -1px 3px ${N.shadowL}` }}>
                             <div style={{ color: N.muted, fontSize: 9, fontWeight: 700 }}>{l}</div>
                             <div style={{ fontWeight: 600, color: N.text }}>{typeof v === "number" ? fmt.brl(v) : (v || "-")}</div>
@@ -827,7 +903,7 @@ function ContasPage({ drafts, projetos, onDraftsChanged, spAccount }: { drafts: 
           </table>
         </div>
       </div>
-      {editing !== null && <ContaForm conta={editing} onSave={save} onClose={() => setEditing(null)} drafts={drafts} projetos={projetos} onDraftsChanged={onDraftsChanged} spAccount={spAccount} />}
+      {editing !== null && <ContaForm conta={editing} onSave={save} onClose={() => setEditing(null)} drafts={drafts} projetos={projetos} impostos={impostos} onDraftsChanged={onDraftsChanged} spAccount={spAccount} />}
       {delTarget && (
         <DeleteModal
           info={`WO ${delTarget.wo} | ${delTarget.cliente} | ${delTarget.plataforma} | ${delTarget.doc || "-"} | Status: ${delTarget.status}`}
@@ -1025,7 +1101,7 @@ function QualtechProjectsPage() {
 }
 
 // ===== GENERIC CRUD =====
-function CRUDPage<T extends { id?: number }>({ title, icon, endpoint, columns, emptyItem, renderForm, info, extraButton, staticData, spLoad, spSave, spDelete }: {
+function CRUDPage<T extends { id?: number }>({ title, icon, endpoint, columns, emptyItem, renderForm, info, extraButton, staticData, spLoad, spSave, spDelete, readOnly }: {
   title: string; icon: string; endpoint: string; info?: string;
   columns: { key: string; label: string; render?: (v: any, row: T) => React.ReactNode }[];
   emptyItem: T; renderForm: (form: T, set: (k: keyof T, v: any) => void) => React.ReactNode;
@@ -1034,6 +1110,8 @@ function CRUDPage<T extends { id?: number }>({ title, icon, endpoint, columns, e
   spLoad?: () => Promise<T[]>;
   spSave?: (form: T) => Promise<void>;
   spDelete?: (id: number) => Promise<void>;
+  /** Só consulta — sem botões de criar/editar/excluir (ex.: tabelas fixas no código-fonte) */
+  readOnly?: boolean;
 }) {
   const [items, setItems] = useState<T[]>(staticData ?? []);
   const [editing, setEditing] = useState<T | null>(null);
@@ -1062,30 +1140,30 @@ function CRUDPage<T extends { id?: number }>({ title, icon, endpoint, columns, e
   return (
     <div style={S.page}>
       {info && <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 10, padding: "8px 14px", marginBottom: 10, fontSize: 12, color: "#1e40af" }}>
-        📋 <strong>SharePoint:</strong> {info}
+        📋 {info}
       </div>}
       <div style={S.card}>
         <div style={S.cardHeader}>
           <span style={S.cardTitle}>{icon} {title} ({items.length})</span>
           <div style={{ display: "flex", gap: 6 }}>
             <button style={btn("#6366f1")} onClick={() => exportCSV(`${endpoint}.csv`, columns, items)} title="Exportar dados para importar no SharePoint">⬇ Exportar CSV</button>
-            <button style={btn("#059669")} onClick={() => { setForm({ ...emptyItem }); setEditing({ ...emptyItem }); }}>➕ Novo</button>
+            {!readOnly && <button style={btn("#059669")} onClick={() => { setForm({ ...emptyItem }); setEditing({ ...emptyItem }); }}>➕ Novo</button>}
           </div>
         </div>
         <div style={{ overflowX: "auto" }}>
           <table style={S.table}>
             <thead><tr>
-              <th style={{ ...S.th, width: 70 }}>Ações</th>
+              {!readOnly && <th style={{ ...S.th, width: 70 }}>Ações</th>}
               {columns.map(c => <th key={c.key} style={S.th}>{c.label}</th>)}
             </tr></thead>
             <tbody>
-              {items.length === 0 && <tr><td colSpan={columns.length + 1} style={{ ...S.td, textAlign: "center", color: "#94a3b8", padding: 24 }}>Sem registros</td></tr>}
+              {items.length === 0 && <tr><td colSpan={columns.length + (readOnly ? 0 : 1)} style={{ ...S.td, textAlign: "center", color: "#94a3b8", padding: 24 }}>Sem registros</td></tr>}
               {items.map((row, i) => (
                 <tr key={row.id || i} style={{ background: i % 2 === 0 ? N.card : N.bg }}>
-                  <td style={S.td}><div style={{ display: "flex", gap: 2 }}>
+                  {!readOnly && <td style={S.td}><div style={{ display: "flex", gap: 2 }}>
                     <button style={btnSm(N.accent)} title="Editar" onClick={() => { setForm({ ...row }); setEditing(row); }}>✏️</button>
                     <button style={btnSm("#dc2626")} title="Excluir" onClick={() => setDelTarget(row)}>🗑</button>
-                  </div></td>
+                  </div></td>}
                   {columns.map(c => <td key={c.key} style={S.td}>{c.render ? c.render((row as any)[c.key], row) : String((row as any)[c.key] ?? "-")}</td>)}
                 </tr>
               ))}
@@ -1168,51 +1246,22 @@ async function logAndDelete(_endpoint: string, _id: number, _resumo: string, _re
 // ===== DRAFTS PAGE =====
 function DraftsPage({ onDraftsChanged }: { onDraftsChanged?: () => void }) {
   const [items, setItems] = useState<Draft[]>([]);
-  const [editing, setEditing] = useState<Draft | null>(null);
-  const [form, setForm] = useState<Draft>({ codigo: 0, data_draft: "", descricao: "", ativo: true });
-  const [syncing, setSyncing] = useState(false);
-  const [delTarget, setDelTarget] = useState<Draft | null>(null);
 
   const load = () => { setItems(STATIC_DRAFTS as Draft[]); onDraftsChanged?.(); };
   useEffect(() => { load(); }, []);
-  const setField = (k: keyof Draft, v: any) => setForm(prev => ({ ...prev, [k]: v }));
-
-  const save = async () => { setEditing(null); };
-
-  const sincronizar = async () => {
-    setSyncing(true);
-    try {
-      alert("Sincronização disponível apenas com backend ativo.");
-    } finally { setSyncing(false); }
-  };
-
-  const del = async (responsavel: string, motivo: string) => {
-    if (!delTarget?.id) return;
-    const resumo = `Draft #${delTarget.codigo} — ${delTarget.data_draft || "sem data"}`;
-    await logAndDelete("drafts", delTarget.id, resumo, responsavel, motivo);
-    setDelTarget(null); load();
-  };
 
   return (
     <div style={S.page}>
+      <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 10, padding: "8px 14px", marginBottom: 10, fontSize: 12, color: "#1e40af" }}>
+        📋 Drafts fixos no código-fonte (sem lista SharePoint própria). Para incluir/alterar uma draft, peça a mudança e o deploy — esta tela é só consulta. O código de draft de cada Conta a Receber fica gravado no próprio registro (campo Draft).
+      </div>
       <div style={S.card}>
         <div style={S.cardHeader}>
           <span style={S.cardTitle}>📝 Drafts ({items.length})</span>
-          <div style={{ display: "flex", gap: 6 }}>
-            <button style={btn("#059669")} onClick={() => {
-              const proximo = Math.max(0, ...items.map(d => d.codigo ?? 0)) + 1;
-              setForm({ codigo: proximo, data_draft: new Date().toISOString().slice(0, 10), descricao: "", ativo: true });
-              setEditing({ codigo: proximo, ativo: true });
-            }}>➕ Nova Draft</button>
-            <button style={btn("#0891b2")} onClick={sincronizar} disabled={syncing} title="Importa automaticamente todos os códigos de draft usados nas Contas a Receber">
-              {syncing ? "⏳ Sincronizando..." : "⟳ Sincronizar das Contas"}
-            </button>
-          </div>
         </div>
         <div style={{ overflowX: "auto" }}>
           <table style={S.table}>
             <thead><tr>
-              <th style={{ ...S.th, width: 70 }}>Ações</th>
               <th style={S.th}>Código</th>
               <th style={S.th}>Data da Draft</th>
               <th style={S.th}>Descrição</th>
@@ -1220,16 +1269,10 @@ function DraftsPage({ onDraftsChanged }: { onDraftsChanged?: () => void }) {
             </tr></thead>
             <tbody>
               {items.length === 0 && (
-                <tr><td colSpan={5} style={{ ...S.td, textAlign: "center", color: N.muted, padding: 32 }}>
-                  Sem drafts. Clique em "⟳ Sincronizar das Contas" para importar os dados existentes.
-                </td></tr>
+                <tr><td colSpan={4} style={{ ...S.td, textAlign: "center", color: N.muted, padding: 32 }}>Sem drafts.</td></tr>
               )}
               {items.map((row, i) => (
                 <tr key={row.id || i} style={{ background: i % 2 === 0 ? N.card : N.bg }}>
-                  <td style={S.td}><div style={{ display: "flex", gap: 2 }}>
-                    <button style={btnSm(N.accent)} onClick={() => { setForm({ ...row }); setEditing(row); }}>✏️</button>
-                    <button style={btnSm("#dc2626")} onClick={() => setDelTarget(row)}>🗑</button>
-                  </div></td>
                   <td style={{ ...S.td, fontWeight: 800, fontSize: 14 }}>#{row.codigo}</td>
                   <td style={S.td}>{fmt.date(row.data_draft)}</td>
                   <td style={{ ...S.td, color: N.muted }}>{row.descricao || "—"}</td>
@@ -1240,37 +1283,6 @@ function DraftsPage({ onDraftsChanged }: { onDraftsChanged?: () => void }) {
           </table>
         </div>
       </div>
-
-      {editing !== null && (
-        <div style={S.modal} onClick={e => { if (e.target === e.currentTarget) setEditing(null); }}>
-          <div style={{ ...S.modalBox, maxWidth: 480 }}>
-            <div style={{ ...S.cardHeader, background: N.accent }}>
-              <span style={{ ...S.cardTitle, color: "#fff" }}>{form.id ? "✏️ Editar" : "➕ Nova"} Draft</span>
-              <button style={btn("#dc2626")} onClick={() => setEditing(null)}>✕</button>
-            </div>
-            <div style={{ padding: 20 }}>
-              <div style={grid(2)}>
-                <Field label="Código Draft"><input type="number" style={S.input} value={form.codigo || ""} onChange={e => setField("codigo", +e.target.value)} /></Field>
-                <Field label="Data da Draft"><input type="date" style={S.input} value={form.data_draft || ""} onChange={e => setField("data_draft", e.target.value)} /></Field>
-                <div style={{ gridColumn: "1/-1" }}>
-                  <Field label="Descrição (opcional)"><input style={S.input} value={form.descricao || ""} onChange={e => setField("descricao", e.target.value)} /></Field>
-                </div>
-              </div>
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
-                <button style={btn("#64748b")} onClick={() => setEditing(null)}>Cancelar</button>
-                <button style={btn("#059669")} onClick={save}>💾 Salvar</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      {delTarget && (
-        <DeleteModal
-          info={`Draft #${delTarget.codigo} — ${fmt.date(delTarget.data_draft)}`}
-          onConfirm={del}
-          onCancel={() => setDelTarget(null)}
-        />
-      )}
     </div>
   );
 }
@@ -1730,6 +1742,389 @@ function ListaWOsPage({ spAccount, onLogin, onLogout }: {
   );
 }
 
+// ===== PRODUCTION PROJECTS PAGE =====
+const MESES_PT = ["","Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+const PAISES_PROD: Record<number, string> = { 10: "🇧🇷 BRA", 20: "🇺🇸 EUA", 30: "🇲🇽 MEX" };
+const EMPTY_PROD: ProducaoItem = {
+  Month_Producao: new Date().getMonth() + 1,
+  Year_Producao: new Date().getFullYear(),
+  E_Or_F: "E",
+  ID_Country: 10,
+};
+
+function calcProducao(f: ProducaoItem): Partial<ProducaoItem> {
+  const idwo = f.ID_Country != null && f.WO_Producao != null
+    ? `${f.ID_Country}${Math.round(f.WO_Producao)}`
+    : f.IDWO;
+  const ticket = (f.Total_Producao != null && f.Total_Daily_Producao != null && f.Total_Daily_Producao !== 0)
+    ? +(f.Total_Producao / f.Total_Daily_Producao).toFixed(2)
+    : f.Ticket_Medio_Producao;
+  return { IDWO: idwo, Ticket_Medio_Producao: ticket };
+}
+
+function ProducaoPage() {
+  const [items, setItems] = useState<ProducaoItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<ProducaoItem | null>(null);
+  const [form, setForm] = useState<ProducaoItem>({ ...EMPTY_PROD });
+  const [delTarget, setDelTarget] = useState<ProducaoItem | null>(null);
+  const [filters, setFilters] = useState<{ wo?: string; mes?: number; ano?: number; ef?: string; cliente?: string }>({});
+  const allRef = useRef<ProducaoItem[]>([]);
+
+  const applyFilters = useCallback((data: ProducaoItem[], f: typeof filters) => {
+    let r = data;
+    if (f.wo)      r = r.filter(x => String(x.WO_Producao ?? '').includes(f.wo!));
+    if (f.mes)     r = r.filter(x => x.Month_Producao === f.mes);
+    if (f.ano)     r = r.filter(x => x.Year_Producao === f.ano);
+    if (f.ef)      r = r.filter(x => x.E_Or_F === f.ef);
+    if (f.cliente) r = r.filter(x => (x.Nome_Cliente_Producao ?? '').toLowerCase().includes(f.cliente!.toLowerCase()));
+    setItems(r);
+  }, []);
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const data = await listProducaoFromSP();
+      allRef.current = data;
+      applyFilters(data, filters);
+    } catch (e: any) { setError(e.message); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const hf = (k: keyof ProducaoItem, v: any) => {
+    setForm(prev => {
+      const updated = { ...prev, [k]: v };
+      return { ...updated, ...calcProducao(updated) };
+    });
+  };
+
+  const save = async () => {
+    try {
+      if (form.id) await updateProducao(form.id, form);
+      else await createProducao(form);
+      setEditing(null); load();
+    } catch (e: any) { alert(`Erro ao salvar: ${e.message}`); }
+  };
+
+  const del = async () => {
+    if (!delTarget?.id) return;
+    try { await deleteProducao(delTarget.id); setDelTarget(null); load(); }
+    catch (e: any) { alert(`Erro: ${e.message}`); }
+  };
+
+  const stats = useMemo(() => ({
+    count: items.length,
+    value: items.reduce((s, x) => s + (x.Value_Producao ?? 0), 0),
+    total: items.reduce((s, x) => s + (x.Total_Producao ?? 0), 0),
+    wip:   items.reduce((s, x) => s + (x.WIP_Producao ?? 0), 0),
+    inv:   items.reduce((s, x) => s + (x.Invoice_Total_Value_Producao ?? 0), 0),
+  }), [items]);
+
+  const numInput = (label: string, k: keyof ProducaoItem) => (
+    <Field label={label}>
+      <input type="number" step="any" style={S.input} value={(form as any)[k] ?? ""}
+        onChange={e => hf(k, e.target.value ? +e.target.value : undefined)} />
+    </Field>
+  );
+  const curInput = (label: string, k: keyof ProducaoItem) => (
+    <Field label={label}>
+      <CurrencyInput style={S.input} value={(form as any)[k]} onChange={v => hf(k, v)} />
+    </Field>
+  );
+  const dtInput = (label: string, k: keyof ProducaoItem) => (
+    <Field label={label}>
+      <input type="date" style={S.input} value={(form as any)[k] ?? ""}
+        onChange={e => hf(k, e.target.value || undefined)} />
+    </Field>
+  );
+  const txtInput = (label: string, k: keyof ProducaoItem, ph?: string) => (
+    <Field label={label}>
+      <input style={S.input} value={(form as any)[k] ?? ""} placeholder={ph}
+        onChange={e => hf(k, e.target.value || undefined)} />
+    </Field>
+  );
+
+  const csvCols = [
+    {key:"IDWO",label:"IDWO"},{key:"WO_Producao",label:"WO"},{key:"ID_Country",label:"País ID"},
+    {key:"Month_Producao",label:"Mês"},{key:"Year_Producao",label:"Ano"},{key:"E_Or_F",label:"E/F"},
+    {key:"Nome_Cliente_Producao",label:"Cliente"},{key:"Rig_Producao",label:"Plataforma"},
+    {key:"Contract_Category_Producao",label:"Categoria"},{key:"Quote_Producao",label:"Quote"},
+    {key:"Start_Date_Producao",label:"Início"},{key:"End_Date_Producao",label:"Fim"},
+    {key:"Value_Producao",label:"Value"},{key:"Total_Producao",label:"Total"},
+    {key:"WIP_Producao",label:"WIP"},{key:"Invoice_Total_Value_Producao",label:"Invoice"},
+    {key:"Ticket_Medio_Producao",label:"Ticket Médio"},
+  ];
+
+  return (
+    <div style={S.page}>
+      {error && (
+        <div style={{ background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:10, padding:"10px 16px", marginBottom:12, fontSize:12, color:"#991b1b" }}>
+          ⚠️ {error}
+          <button onClick={load} style={{ marginLeft:8, background:"#dc2626", border:"none", color:"#fff", borderRadius:6, padding:"3px 10px", cursor:"pointer", fontSize:11 }}>Tentar novamente</button>
+        </div>
+      )}
+
+      {/* Stats */}
+      <div style={{ display:"flex", gap:12, marginBottom:12, flexWrap:"wrap" as const }}>
+        {([
+          ["Registros", items.length, "#0f172a"],
+          ["Valor (Value)", fmt.brl(stats.value), "#0284c7"],
+          ["Total Produção", fmt.brl(stats.total), "#059669"],
+          ["WIP", fmt.brl(stats.wip), "#f59e0b"],
+          ["Faturado (Invoice)", fmt.brl(stats.inv), "#8b5cf6"],
+        ] as [string,any,string][]).map(([l,v,c]) => (
+          <div key={l} style={S.stat}>
+            <div style={{ fontSize:19, fontWeight:800, color:c }}>{v}</div>
+            <div style={{ fontSize:11, color:N.muted, marginTop:2 }}>{l}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filtros */}
+      <div style={S.filters}>
+        <div><label style={{ ...S.label, fontSize:10, textTransform:"uppercase" as const }}>WO</label>
+          <input style={{ ...S.input, width:80 }} value={filters.wo||""} onChange={e => setFilters(f => ({...f,wo:e.target.value}))} /></div>
+        <div><label style={{ ...S.label, fontSize:10, textTransform:"uppercase" as const }}>Mês</label>
+          <select style={{ ...S.select, width:90 }} value={filters.mes||""} onChange={e => setFilters(f => ({...f, mes:e.target.value?+e.target.value:undefined}))}>
+            <option value="">Todos</option>
+            {MESES_PT.slice(1).map((m,i) => <option key={i+1} value={i+1}>{m}</option>)}
+          </select></div>
+        <div><label style={{ ...S.label, fontSize:10, textTransform:"uppercase" as const }}>Ano</label>
+          <input type="number" style={{ ...S.input, width:90 }} value={filters.ano||""} placeholder="2026" onChange={e => setFilters(f => ({...f, ano:e.target.value?+e.target.value:undefined}))} /></div>
+        <div><label style={{ ...S.label, fontSize:10, textTransform:"uppercase" as const }}>E/F</label>
+          <select style={{ ...S.select, width:80 }} value={filters.ef||""} onChange={e => setFilters(f => ({...f, ef:e.target.value||undefined}))}>
+            <option value="">Todos</option>
+            <option value="E">E</option>
+            <option value="F">F</option>
+          </select></div>
+        <div><label style={{ ...S.label, fontSize:10, textTransform:"uppercase" as const }}>Cliente</label>
+          <input style={{ ...S.input, width:150 }} value={filters.cliente||""} onChange={e => setFilters(f => ({...f, cliente:e.target.value}))} /></div>
+        <div style={{ display:"flex", gap:5, alignItems:"flex-end" }}>
+          <button style={btn()} onClick={() => applyFilters(allRef.current, filters)}>🔍 Filtrar</button>
+          <button style={btn("#64748b")} onClick={() => { const f = {}; setFilters(f); applyFilters(allRef.current, f); }}>✕</button>
+          <button style={btn("#6366f1")} onClick={load} disabled={loading}>↺ {loading ? "⏳" : ""}</button>
+        </div>
+      </div>
+
+      {/* Tabela */}
+      <div style={S.card}>
+        <div style={S.cardHeader}>
+          <span style={S.cardTitle}>🏭 Production Projects · {items.length} registros {loading && "⏳"}</span>
+          <div style={{ display:"flex", gap:5 }}>
+            <button style={btn("#059669")} onClick={() => { const f = { ...EMPTY_PROD }; setForm({ ...f, ...calcProducao(f) }); setEditing(f); }}>➕ Novo</button>
+            <button style={btn("#6366f1")} onClick={() => exportCSV("bd_producao.csv", csvCols, items)}>⬇ CSV</button>
+          </div>
+        </div>
+        <div style={{ overflowX:"auto" }}>
+          <table style={S.table}>
+            <thead><tr>
+              <th style={{ ...S.th, width:70 }}>Ações</th>
+              <th style={S.th}>IDWO</th>
+              <th style={S.th}>WO</th>
+              <th style={S.th}>País</th>
+              <th style={S.th}>Mês/Ano</th>
+              <th style={S.th}>E/F</th>
+              <th style={S.th}>Cliente</th>
+              <th style={S.th}>Plataforma</th>
+              <th style={S.th}>Categoria</th>
+              <th style={S.th}>DI</th>
+              <th style={S.th}>Invoice</th>
+              <th style={S.th}>Value</th>
+              <th style={S.th}>Total</th>
+              <th style={S.th}>WIP</th>
+              <th style={S.th}>Ticket Médio</th>
+            </tr></thead>
+            <tbody>
+              {items.length === 0 && !loading && (
+                <tr><td colSpan={15} style={{ ...S.td, textAlign:"center", color:"#94a3b8", padding:40 }}>
+                  {error ? "Erro ao carregar." : "Nenhum registro. Clique em ↺ para carregar ou ➕ para criar."}
+                </td></tr>
+              )}
+              {items.map((row, i) => (
+                <tr key={row.id ?? i} style={{ background: i%2===0 ? N.card : N.bg }}>
+                  <td style={S.td}><div style={{ display:"flex", gap:2 }}>
+                    <button style={btnSm(N.accent)} onClick={() => { setForm({...row}); setEditing(row); }}>✏️</button>
+                    <button style={btnSm("#dc2626")} onClick={() => setDelTarget(row)}>🗑</button>
+                  </div></td>
+                  <td style={{ ...S.td, fontWeight:700 }}>{row.IDWO || "—"}</td>
+                  <td style={{ ...S.td, fontWeight:700 }}>{row.WO_Producao || "—"}</td>
+                  <td style={S.td}>{row.ID_Country ? (PAISES_PROD[row.ID_Country] || row.ID_Country) : "—"}</td>
+                  <td style={S.td}>{row.Month_Producao ? `${MESES_PT[row.Month_Producao]}/${row.Year_Producao}` : "—"}</td>
+                  <td style={S.td}><Badge text={row.E_Or_F || "—"} color={row.E_Or_F==="F" ? "#059669" : "#f59e0b"} /></td>
+                  <td style={S.td}>{row.Nome_Cliente_Producao || "—"}</td>
+                  <td style={S.td}>{row.Rig_Producao || "—"}</td>
+                  <td style={S.td}>{row.Contract_Category_Producao || "—"}</td>
+                  <td style={S.td}>{row.DI_Producao || "—"}</td>
+                  <td style={S.td}>{row.Number_Of_Invoice_Producao || "—"}</td>
+                  <td style={{ ...S.td, color:"#0284c7", fontWeight:600 }}>{row.Value_Producao != null ? fmt.brl(row.Value_Producao) : "—"}</td>
+                  <td style={{ ...S.td, color:"#059669", fontWeight:700 }}>{row.Total_Producao != null ? fmt.brl(row.Total_Producao) : "—"}</td>
+                  <td style={{ ...S.td, color:"#f59e0b", fontWeight:600 }}>{row.WIP_Producao != null ? fmt.brl(row.WIP_Producao) : "—"}</td>
+                  <td style={S.td}>{row.Ticket_Medio_Producao != null ? fmt.brl(row.Ticket_Medio_Producao) : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Modal Form */}
+      {editing !== null && (
+        <div style={S.modal} onClick={e => { if (e.target === e.currentTarget) setEditing(null); }}>
+          <div style={{ ...S.modalBox, width:"min(1000px,96vw)" }}>
+            {/* Header */}
+            <div style={{ display:"flex", alignItems:"center", gap:14, padding:"14px 36px 12px 18px", borderBottom:`1px solid ${N.shadowD}` }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontWeight:800, fontSize:15, color:N.text }}>
+                  {form.id ? `✏️ Editar — IDWO ${form.IDWO || form.WO_Producao}` : "➕ Nova Produção"}
+                </div>
+                <div style={{ fontSize:11, color:N.muted, marginTop:1 }}>
+                  BD_Producao · SharePoint
+                  {form.IDWO && <span style={{ marginLeft:8, fontWeight:700, color:N.accent }}>IDWO: {form.IDWO}</span>}
+                </div>
+              </div>
+              <button onClick={() => setEditing(null)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:22, color:N.muted, lineHeight:1 }}>×</button>
+            </div>
+
+            <div style={{ overflowY:"auto", maxHeight:"calc(90vh - 70px)", padding:20 }}>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12 }}>
+
+                <Section title="Identificação" />
+                <Field label="País">
+                  <select style={S.select} value={form.ID_Country ?? 10} onChange={e => hf("ID_Country", +e.target.value)}>
+                    <option value={10}>🇧🇷 Brasil</option>
+                    <option value={20}>🇺🇸 EUA</option>
+                    <option value={30}>🇲🇽 México</option>
+                  </select>
+                </Field>
+                {numInput("WO", "WO_Producao")}
+                <Field label="IDWO (auto)">
+                  <input readOnly style={{ ...S.input, background:"#f0fdf4", fontWeight:700, color:"#059669" }} value={form.IDWO || ""} />
+                </Field>
+                <Field label="E / F">
+                  <select style={S.select} value={form.E_Or_F || "E"} onChange={e => hf("E_Or_F", e.target.value)}>
+                    <option value="E">E — Estimado</option>
+                    <option value="F">F — Faturado</option>
+                  </select>
+                </Field>
+                <Field label="Mês">
+                  <select style={S.select} value={form.Month_Producao || ""} onChange={e => hf("Month_Producao", e.target.value ? +e.target.value : undefined)}>
+                    <option value="">—</option>
+                    {MESES_PT.slice(1).map((m,i) => <option key={i+1} value={i+1}>{m}</option>)}
+                  </select>
+                </Field>
+                {numInput("Ano", "Year_Producao")}
+                {dtInput("Data Competência", "Data_Competencia")}
+                <div />
+
+                <Section title="Cliente / Operação" />
+                {numInput("ID Cliente", "ID_Client_Producao")}
+                {txtInput("Nome Cliente", "Nome_Cliente_Producao")}
+                {txtInput("Plataforma / Rig", "Rig_Producao")}
+                {numInput("ID Plataforma", "ID_Rig_Producao")}
+                {txtInput("Categoria Contrato", "Contract_Category_Producao")}
+                {numInput("ID Categoria", "ID_Contract_Category_Producao")}
+                {txtInput("Quote (Proposta)", "Quote_Producao")}
+                <div />
+
+                <Section title="Datas de Operação" />
+                {dtInput("Data Início", "Start_Date_Producao")}
+                {dtInput("Data Fim", "End_Date_Producao")}
+                {txtInput("DI", "DI_Producao")}
+                {dtInput("Data DI", "DI_Date_Producao")}
+
+                <Section title="Faturamento" />
+                {curInput("Value (Valor Serviço)", "Value_Producao")}
+                {curInput("Amount Charged", "Amount_Charget_Producao")}
+                {curInput("WIP", "WIP_Producao")}
+                {curInput("Pending", "Pending_Producao")}
+                {txtInput("Nº Invoice", "Number_Of_Invoice_Producao")}
+                {curInput("Invoice Total", "Invoice_Total_Value_Producao")}
+                {dtInput("Data Invoice", "Invoice_Date_Producao")}
+                {numInput("Days NF", "Days_NF_Des_Producao")}
+                {txtInput("REI Nº", "Rental_Equipment_Invoice_REI_Pro")}
+                {curInput("REI Value", "Rental_Equipment_Invoice_Value_P")}
+                {dtInput("Data REI", "REI_Date_Producao")}
+                {numInput("Days FL", "Days_FL_Des_Producao")}
+
+                <Section title="Custos — Diárias" />
+                {curInput("Daily (valor R$)", "Daily_Producao")}
+                {curInput("Stand By (valor R$)", "Stand_By_Producao")}
+                {numInput("Total Dias (qtd)", "Total_Daily_Producao")}
+                {numInput("Dias Stand By (qtd)", "Day_Stand_By_Producao")}
+
+                <Section title="Custos — Pessoal / Materiais" />
+                {curInput("Pessoal", "Personal_Producao")}
+                {curInput("Log. Pessoal", "Personel_Logistics_Producao")}
+                {curInput("Hotel / Refeição", "Hotel_Meal_Producao")}
+                {curInput("Equip. Trânsito", "Equipment_In_Transit_Producao")}
+                {curInput("Material", "Material_Producao")}
+                {curInput("Log. Materiais", "Log_De_Materiais_Producao")}
+                {curInput("Var. Câmbio", "Exchange_Rate_Variation_Producao")}
+                {curInput("LOP", "LOP_Producao")}
+                {curInput("Tags / Slings", "Tags_Slings_Producao")}
+                {curInput("Extra Time", "Extra_Time_Producao")}
+                {curInput("Outros", "Others_Producao")}
+                {curInput("ART (Resp. Técnica)", "ART_Technical_Responsibility_Pro")}
+                {curInput("Engineering", "Engineering_Producao")}
+                <div />
+
+                <Section title="Totais" />
+                <div style={{ gridColumn:"1/-1" }}>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12 }}>
+                    <Field label="Total Produção">
+                      <CurrencyInput bold style={{ ...S.input }} value={form.Total_Producao} onChange={v => hf("Total_Producao", v)} />
+                    </Field>
+                    <Field label="Ticket Médio (auto = Total ÷ Dias)">
+                      <input readOnly style={{ ...S.input, background:"#eff6ff", fontWeight:700, color:N.accent }}
+                        value={form.Ticket_Medio_Producao != null ? form.Ticket_Medio_Producao.toLocaleString("pt-BR", { minimumFractionDigits:2 }) : ""} />
+                    </Field>
+                    <div style={{ gridColumn:"1/-1", background:N.bg, borderRadius:8, padding:"8px 12px", fontSize:11, color:N.muted, boxShadow:`inset 2px 2px 5px ${N.shadowD}` }}>
+                      🧮 <strong>Cálculos automáticos:</strong> &nbsp;
+                      IDWO = País + WO &nbsp;|&nbsp;
+                      Ticket Médio = Total Produção ÷ Total Dias &nbsp;|&nbsp;
+                      Demais campos (WIP, Value, Pending) precisam de fórmula do Excel para automatizar.
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              <div style={{ display:"flex", justifyContent:"flex-end", gap:8, marginTop:20 }}>
+                <button style={btn("#64748b")} onClick={() => setEditing(null)}>Cancelar</button>
+                <button style={btn("#059669")} onClick={save}>💾 Salvar no SharePoint</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirm */}
+      {delTarget && (
+        <div style={S.modal} onClick={e => { if (e.target === e.currentTarget) setDelTarget(null); }}>
+          <div style={{ ...S.modalBox, maxWidth:400 }}>
+            <div style={{ ...S.cardHeader, background:"#dc2626", borderRadius:"14px 14px 0 0" }}>
+              <span style={{ color:"#fff", fontWeight:700 }}>🗑 Confirmar Exclusão</span>
+              <button onClick={() => setDelTarget(null)} style={{ background:"none", border:"none", color:"#fff", cursor:"pointer", fontSize:18 }}>×</button>
+            </div>
+            <div style={{ padding:20 }}>
+              <div style={{ background:N.bg, borderRadius:8, padding:"10px 14px", fontSize:12, color:N.muted, marginBottom:16, boxShadow:`inset 2px 2px 5px ${N.shadowD}` }}>
+                IDWO: <strong>{delTarget.IDWO || delTarget.WO_Producao}</strong> · {delTarget.Nome_Cliente_Producao || "—"} · {delTarget.Month_Producao ? `${MESES_PT[delTarget.Month_Producao]}/${delTarget.Year_Producao}` : "—"}
+              </div>
+              <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+                <button style={btn("#64748b")} onClick={() => setDelTarget(null)}>Cancelar</button>
+                <button style={btn("#dc2626")} onClick={del}>Excluir</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [tab, setTab] = useState<Tab>(() => (sessionStorage.getItem("mos-tab") as Tab) || "contas");
   const changeTab = (t: Tab) => {
@@ -1739,6 +2134,8 @@ export default function App() {
   };
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [projetos, setProjetos] = useState<Projeto[]>([]);
+  // Alíquotas ficam fixas no código (STATIC_IMPOSTOS) — para alterar, peça a atualização e o deploy
+  const impostos = STATIC_IMPOSTOS;
   const [dark, setDark] = useState(() => localStorage.getItem("mos-dark") === "1");
   const [dashPage, setDashPage] = useState<string>("status");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -1821,6 +2218,7 @@ export default function App() {
         {/* Nav principal (flex:1, overflow auto interno) */}
         <div style={{ ...S.nav, flex: 1, margin: 0, justifyContent: "flex-start" }}>
           <button style={navBtn(tab === "contas")} onClick={() => changeTab("contas")}>📋 Contas a Receber</button>
+          <button style={navBtn(tab === "producao")} onClick={() => changeTab("producao")}>🏭 Production Projects</button>
           <button style={navBtn(tab === "dashboard")} onClick={() => changeTab("dashboard")}>📊 Dashboard</button>
 
           {tab === "dashboard" && (
@@ -1899,9 +2297,12 @@ export default function App() {
       </div>
 
       {tab === "dashboard" && <Dashboard dark={dark} onToggleDark={toggleDark} page={dashPage} onPageChange={setDashPage} />}
-      {tab === "contas" && <ContasPage drafts={drafts} projetos={projetos} onDraftsChanged={reloadDrafts} spAccount={spAccount} />}
+      {tab === "contas" && <ContasPage drafts={drafts} projetos={projetos} impostos={impostos} onDraftsChanged={reloadDrafts} spAccount={spAccount} />}
+      {tab === "producao" && <ProducaoPage />}
 
       {tab === "impostos" && <CRUDPage<Imposto> title="Impostos" icon="🧾" endpoint="impostos" staticData={STATIC_IMPOSTOS}
+        readOnly
+        info="Alíquotas fixas no código-fonte (usadas no cálculo automático da Conta a Receber). Para alterar um valor, peça a mudança e o deploy — esta tela é só consulta."
         columns={[{ key: "nome", label: "Imposto" }, { key: "tipo", label: "Tipo", render: v => <Badge text={v === "retido_fonte" ? "Retido" : "A Pagar"} /> }, { key: "tipo_documento", label: "Documento" }, { key: "tipo_servico", label: "Tipo Serviço" }, { key: "cidade", label: "Cidade" }, { key: "aliquota", label: "Alíquota", render: v => <strong style={{ color: "#dc2626" }}>{fmt.pct(v)}</strong> }, { key: "vigencia_inicio", label: "Vigência", render: v => fmt.date(v) }]}
         emptyItem={{ nome: "", tipo: "retido_fonte", aliquota: 0, vigencia_inicio: "2020-01-01", ativo: true }}
         renderForm={(f, set) => (<>
@@ -1914,6 +2315,8 @@ export default function App() {
         </>)} />}
 
       {tab === "clientes" && <CRUDPage<ClientePrazo> title="Prazos por Cliente" icon="👥" endpoint="clientes-prazos" staticData={STATIC_CLIENTES_PRAZOS as ClientePrazo[]}
+        readOnly
+        info="Prazos fixos no código-fonte (sem lista SharePoint própria). Para alterar um valor, peça a mudança e o deploy — esta tela é só consulta."
         columns={[{ key: "cliente", label: "Cliente" }, { key: "rec_doc", label: "Rec. Doc" }, { key: "medicao", label: "Medição" }, { key: "resp_cli", label: "Resp. Cli" }, { key: "vencimento", label: "Vencimento" }, { key: "cambio", label: "Câmbio" }, { key: "total_dias", label: "Total", render: v => <strong>{v}</strong> }, { key: "data_limite", label: "Dia Limite" }]}
         emptyItem={{ cliente: "", rec_doc: 5, medicao: 3, resp_cli: 10, vencimento: 30, cambio: 0, data_limite: 30 }}
         renderForm={(f, set) => (<>
@@ -1983,6 +2386,8 @@ export default function App() {
       {tab === "qualtech_projects" && <QualtechProjectsPage />}
 
       {tab === "feriados" && <CRUDPage<Feriado> title="Feriados" icon="📅" endpoint="feriados" staticData={STATIC_FERIADOS}
+        readOnly
+        info="Feriados fixos no código-fonte (sem lista SharePoint própria). Para incluir/alterar um feriado, peça a mudança e o deploy — esta tela é só consulta."
         columns={[{ key: "data", label: "Data", render: v => fmt.date(v) }, { key: "nome", label: "Nome" }, { key: "tipo", label: "Tipo", render: v => <Badge text={v} /> }, { key: "estado", label: "Estado" }, { key: "municipio", label: "Município" }, { key: "pais", label: "País" }]}
         emptyItem={{ data: "", nome: "", tipo: "nacional", pais: "BR" }}
         renderForm={(f, set) => (<>

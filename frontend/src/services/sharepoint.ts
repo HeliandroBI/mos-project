@@ -390,6 +390,230 @@ export async function deleteProject(id: number): Promise<void> {
 
 export const ID_COUNTRY_BR = ID_COUNTRY_BRASIL;
 
+// ── BD_Producao CRUD ──────────────────────────────────────────────────────────
+const PRODUCAO_LIST = 'BD_Producao';
+
+export interface ProducaoItem {
+  id?: number;
+  IDWO?: string;
+  Month_Producao?: number;
+  Year_Producao?: number;
+  E_Or_F?: string;
+  WO_Producao?: number;
+  ID_Country?: number;
+  Contract_Category_Producao?: string;
+  ID_Contract_Category_Producao?: number;
+  ID_Client_Producao?: number;
+  Nome_Cliente_Producao?: string;
+  Rig_Producao?: string;
+  ID_Rig_Producao?: number;
+  Quote_Producao?: string;
+  Start_Date_Producao?: string;
+  End_Date_Producao?: string;
+  Amount_Charget_Producao?: number;
+  Value_Producao?: number;
+  Pending_Producao?: number;
+  DI_Producao?: string;
+  DI_Date_Producao?: string;
+  Number_Of_Invoice_Producao?: string;
+  Invoice_Total_Value_Producao?: number;
+  Invoice_Date_Producao?: string;
+  Days_NF_Des_Producao?: number;
+  Rental_Equipment_Invoice_REI_Pro?: string;
+  Rental_Equipment_Invoice_Value_P?: number;
+  REI_Date_Producao?: string;
+  Days_FL_Des_Producao?: number;
+  WIP_Producao?: number;
+  Daily_Producao?: number;
+  Stand_By_Producao?: number;
+  Total_Daily_Producao?: number;
+  Personal_Producao?: number;
+  Personel_Logistics_Producao?: number;
+  Hotel_Meal_Producao?: number;
+  Equipment_In_Transit_Producao?: number;
+  Material_Producao?: number;
+  Log_De_Materiais_Producao?: number;
+  Exchange_Rate_Variation_Producao?: number;
+  LOP_Producao?: number;
+  Tags_Slings_Producao?: number;
+  Extra_Time_Producao?: number;
+  Others_Producao?: number;
+  ART_Technical_Responsibility_Pro?: number;
+  Engineering_Producao?: number;
+  Total_Producao?: number;
+  Ticket_Medio_Producao?: number;
+  Day_Stand_By_Producao?: number;
+  Data_Competencia?: string;
+}
+
+function mapSpToProducao(item: any): ProducaoItem {
+  const n = (v: any) => { if (v == null) return undefined; const x = parseFloat(v); return isNaN(x) ? undefined : x; };
+  const d = (v: any) => {
+    if (!v) return undefined;
+    const m = String(v).match(/\/Date\((-?\d+)(?:[+-]\d+)?\)\//);
+    if (m) return new Date(parseInt(m[1])).toISOString().slice(0, 10);
+    if (String(v).includes('T')) return String(v).slice(0, 10);
+    return v;
+  };
+  return {
+    id: item.ID,
+    IDWO: item.IDWO ?? item.Title ?? undefined,
+    Month_Producao: n(item.Month_Producao),
+    Year_Producao: n(item.Year_Producao),
+    E_Or_F: item.E_Or_F,
+    WO_Producao: n(item.WO_Producao),
+    ID_Country: n(item.ID_Country),
+    Contract_Category_Producao: item.Contract_Category_Producao,
+    ID_Contract_Category_Producao: n(item.ID_Contract_Category_Producao),
+    ID_Client_Producao: n(item.ID_Client_Producao),
+    Nome_Cliente_Producao: item.Nome_Cliente_Producao,
+    Rig_Producao: item.Rig_Producao,
+    ID_Rig_Producao: n(item.ID_Rig_Producao),
+    Quote_Producao: item.Quote_Producao,
+    Start_Date_Producao: d(item.Start_Date_Producao),
+    End_Date_Producao: d(item.End_Date_Producao),
+    Amount_Charget_Producao: n(item.Amount_Charget_Producao),
+    Value_Producao: n(item.Value_Producao),
+    Pending_Producao: n(item.Pending_Producao),
+    DI_Producao: item.DI_Producao,
+    DI_Date_Producao: d(item.DI_Date_Producao),
+    Number_Of_Invoice_Producao: item.Number_Of_Invoice_Producao,
+    Invoice_Total_Value_Producao: n(item.Invoice_Total_Value_Producao),
+    Invoice_Date_Producao: d(item.Invoice_Date_Producao),
+    Days_NF_Des_Producao: n(item.Days_NF_Des_Producao),
+    Rental_Equipment_Invoice_REI_Pro: item.Rental_Equipment_Invoice_REI_Pro,
+    Rental_Equipment_Invoice_Value_P: n(item.Rental_Equipment_Invoice_Value_P),
+    REI_Date_Producao: d(item.REI_Date_Producao),
+    Days_FL_Des_Producao: n(item.Days_FL_Des_Producao),
+    WIP_Producao: n(item.WIP_Producao),
+    Daily_Producao: n(item.Daily_Producao),
+    Stand_By_Producao: n(item.Stand_By_Producao),
+    Total_Daily_Producao: n(item.Total_Daily_Producao),
+    Personal_Producao: n(item.Personal_Producao),
+    Personel_Logistics_Producao: n(item.Personel_Logistics_Producao),
+    Hotel_Meal_Producao: n(item.Hotel_Meal_Producao),
+    Equipment_In_Transit_Producao: n(item.Equipment_In_Transit_Producao),
+    Material_Producao: n(item.Material_Producao),
+    Log_De_Materiais_Producao: n(item.Log_De_Materiais_Producao),
+    Exchange_Rate_Variation_Producao: n(item.Exchange_Rate_Variation_Producao),
+    LOP_Producao: n(item.LOP_Producao),
+    Tags_Slings_Producao: n(item.Tags_Slings_Producao),
+    Extra_Time_Producao: n(item.Extra_Time_Producao),
+    Others_Producao: n(item.Others_Producao),
+    ART_Technical_Responsibility_Pro: n(item.ART_Technical_Responsibility_Pro),
+    Engineering_Producao: n(item.Engineering_Producao),
+    Total_Producao: n(item.Total_Producao),
+    Ticket_Medio_Producao: n(item.Ticket_Medio_Producao),
+    Day_Stand_By_Producao: n(item.Day_Stand_By_Producao),
+    Data_Competencia: d(item.Data_Competencia),
+  };
+}
+
+function producaoToSp(p: ProducaoItem): Record<string, any> {
+  const idwo = p.ID_Country != null && p.WO_Producao != null
+    ? `${p.ID_Country}${Math.round(p.WO_Producao)}`
+    : (p.IDWO ?? '');
+  const payload: Record<string, any> = {
+    Title: idwo || String(p.WO_Producao ?? ''),
+    IDWO: idwo || null,
+    Month_Producao: p.Month_Producao ?? null,
+    Year_Producao: p.Year_Producao ?? null,
+    E_Or_F: p.E_Or_F ?? null,
+    WO_Producao: p.WO_Producao ?? null,
+    ID_Country: p.ID_Country ?? null,
+    Contract_Category_Producao: p.Contract_Category_Producao ?? null,
+    ID_Contract_Category_Producao: p.ID_Contract_Category_Producao ?? null,
+    ID_Client_Producao: p.ID_Client_Producao ?? null,
+    Nome_Cliente_Producao: p.Nome_Cliente_Producao ?? null,
+    Rig_Producao: p.Rig_Producao ?? null,
+    ID_Rig_Producao: p.ID_Rig_Producao ?? null,
+    Quote_Producao: p.Quote_Producao ?? null,
+    Start_Date_Producao: p.Start_Date_Producao ?? null,
+    End_Date_Producao: p.End_Date_Producao ?? null,
+    Amount_Charget_Producao: p.Amount_Charget_Producao ?? null,
+    Value_Producao: p.Value_Producao ?? null,
+    Pending_Producao: p.Pending_Producao ?? null,
+    DI_Producao: p.DI_Producao ?? null,
+    DI_Date_Producao: p.DI_Date_Producao ?? null,
+    Number_Of_Invoice_Producao: p.Number_Of_Invoice_Producao ?? null,
+    Invoice_Total_Value_Producao: p.Invoice_Total_Value_Producao ?? null,
+    Invoice_Date_Producao: p.Invoice_Date_Producao ?? null,
+    Days_NF_Des_Producao: p.Days_NF_Des_Producao ?? null,
+    Rental_Equipment_Invoice_REI_Pro: p.Rental_Equipment_Invoice_REI_Pro ?? null,
+    Rental_Equipment_Invoice_Value_P: p.Rental_Equipment_Invoice_Value_P ?? null,
+    REI_Date_Producao: p.REI_Date_Producao ?? null,
+    Days_FL_Des_Producao: p.Days_FL_Des_Producao ?? null,
+    WIP_Producao: p.WIP_Producao ?? null,
+    Daily_Producao: p.Daily_Producao ?? null,
+    Stand_By_Producao: p.Stand_By_Producao ?? null,
+    Total_Daily_Producao: p.Total_Daily_Producao ?? null,
+    Personal_Producao: p.Personal_Producao ?? null,
+    Personel_Logistics_Producao: p.Personel_Logistics_Producao ?? null,
+    Hotel_Meal_Producao: p.Hotel_Meal_Producao ?? null,
+    Equipment_In_Transit_Producao: p.Equipment_In_Transit_Producao ?? null,
+    Material_Producao: p.Material_Producao ?? null,
+    Log_De_Materiais_Producao: p.Log_De_Materiais_Producao ?? null,
+    Exchange_Rate_Variation_Producao: p.Exchange_Rate_Variation_Producao ?? null,
+    LOP_Producao: p.LOP_Producao ?? null,
+    Tags_Slings_Producao: p.Tags_Slings_Producao ?? null,
+    Extra_Time_Producao: p.Extra_Time_Producao ?? null,
+    Others_Producao: p.Others_Producao ?? null,
+    ART_Technical_Responsibility_Pro: p.ART_Technical_Responsibility_Pro ?? null,
+    Engineering_Producao: p.Engineering_Producao ?? null,
+    Total_Producao: p.Total_Producao ?? null,
+    Ticket_Medio_Producao: p.Ticket_Medio_Producao ?? null,
+    Day_Stand_By_Producao: p.Day_Stand_By_Producao ?? null,
+    Data_Competencia: p.Data_Competencia ?? null,
+  };
+  return Object.fromEntries(Object.entries(payload).filter(([, v]) => v !== undefined));
+}
+
+export async function listProducaoFromSP(): Promise<ProducaoItem[]> {
+  const token = await getToken();
+  let all: any[] = [];
+  let url: string | null = `${SITE}/_api/web/lists/getbytitle('${PRODUCAO_LIST}')/items?$top=2000&$orderby=Year_Producao desc,Month_Producao desc,WO_Producao asc`;
+  while (url) {
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json;odata=nometadata' } });
+    if (!r.ok) throw new Error(`SP listProducao: ${r.status}`);
+    const json = await r.json();
+    all = all.concat(json.value || []);
+    url = json['odata.nextLink'] || null;
+  }
+  return all.map(mapSpToProducao);
+}
+
+export async function createProducao(p: ProducaoItem): Promise<void> {
+  const token = await getToken();
+  const digest = await getDigest();
+  const r = await fetch(`${SITE}/_api/web/lists/getbytitle('${PRODUCAO_LIST}')/items`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'X-RequestDigest': digest, 'Content-Type': 'application/json', Accept: 'application/json;odata=nometadata' },
+    body: JSON.stringify(producaoToSp(p)),
+  });
+  if (!r.ok) throw new Error(`SP createProducao: ${r.status} — ${(await r.text()).slice(0, 200)}`);
+}
+
+export async function updateProducao(id: number, p: ProducaoItem): Promise<void> {
+  const token = await getToken();
+  const digest = await getDigest();
+  const r = await fetch(`${SITE}/_api/web/lists/getbytitle('${PRODUCAO_LIST}')/items(${id})`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'X-RequestDigest': digest, 'Content-Type': 'application/json', Accept: 'application/json;odata=nometadata', 'X-HTTP-Method': 'MERGE', 'If-Match': '*' },
+    body: JSON.stringify(producaoToSp(p)),
+  });
+  if (!r.ok) throw new Error(`SP updateProducao: ${r.status} — ${(await r.text()).slice(0, 200)}`);
+}
+
+export async function deleteProducao(id: number): Promise<void> {
+  const token = await getToken();
+  const digest = await getDigest();
+  const r = await fetch(`${SITE}/_api/web/lists/getbytitle('${PRODUCAO_LIST}')/items(${id})`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'X-RequestDigest': digest, 'X-HTTP-Method': 'DELETE', 'If-Match': '*' },
+  });
+  if (!r.ok) throw new Error(`SP deleteProducao: ${r.status} — ${(await r.text()).slice(0, 200)}`);
+}
+
 // ── fContasReceber CRUD ───────────────────────────────────────────────────────
 const CONTAS_LIST = 'fContasReceber';
 
