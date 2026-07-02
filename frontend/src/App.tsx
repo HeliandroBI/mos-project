@@ -160,6 +160,66 @@ const Field = ({ label, children }: { label: string; children: React.ReactNode }
   <div><label style={S.label}>{label}</label>{children}</div>
 );
 
+// ===== FILTER HEADER (estilo Excel: ordenar + filtro em popover) =====
+type SortDir = "asc" | "desc" | null;
+function FilterHeader({ label, width, sortDir, onSort, active, onClear, children }: {
+  label: string;
+  width?: number;
+  sortDir?: SortDir;
+  onSort?: () => void;
+  active?: boolean;
+  onClear?: () => void;
+  children?: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+
+  return (
+    <th style={{ ...S.th, width, position: "relative" as const }} onClick={e => e.stopPropagation()}>
+      <div style={{ display: "flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" as const }}>
+        <span style={{ cursor: onSort ? "pointer" : "default", userSelect: "none" as const }} onClick={onSort}>{label}</span>
+        {onSort && (
+          <span style={{ fontSize: 10, cursor: "pointer", color: sortDir ? N.accent : N.muted }} onClick={onSort} title="Ordenar">
+            {sortDir === "asc" ? "↑" : sortDir === "desc" ? "↓" : "↕"}
+          </span>
+        )}
+        {children && (
+          <span
+            onClick={() => setOpen(o => !o)}
+            style={{ cursor: "pointer", fontSize: 12, color: active ? N.accent : N.muted, marginLeft: "auto" }}
+            title="Filtrar"
+          >▽</span>
+        )}
+      </div>
+      {open && children && (
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{ position: "absolute", top: "100%", left: 0, zIndex: 30, background: N.card, boxShadow: `4px 4px 12px ${N.shadowD}, -2px -2px 8px ${N.shadowL}`, borderRadius: 8, padding: 8, marginTop: 4, minWidth: 150, textTransform: "none" as const, fontWeight: 400 }}
+        >
+          {children}
+          {active && <button style={{ ...btnSm("#64748b"), marginTop: 6, width: "100%" }} onClick={() => { onClear?.(); setOpen(false); }}>✕ Limpar</button>}
+        </div>
+      )}
+    </th>
+  );
+}
+
+// Comparador genérico p/ ordenação (número > data ISO > texto)
+function genericCompare(a: any, b: any): number {
+  if (a == null && b == null) return 0;
+  if (a == null) return -1;
+  if (b == null) return 1;
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  const na = parseFloat(a), nb = parseFloat(b);
+  if (!isNaN(na) && !isNaN(nb) && String(a).trim() !== "" && String(b).trim() !== "") return na - nb;
+  return String(a).localeCompare(String(b), "pt-BR");
+}
+
 function SearchSelect({ options, value, onChange, placeholder }: {
   options: { id: number; label: string }[];
   value: number | null;
@@ -585,6 +645,12 @@ function ContasPage({ drafts, projetos, impostos, onDraftsChanged, spAccount }: 
   const [items, setItems] = useState<ContaReceber[]>([]);
   const [total, setTotal] = useState({ total: 0, total_bruto: 0, total_liquido: 0 });
   const [filters, setFilters] = useState<any>({});
+  const [sort, setSort] = useState<{ key: string; dir: SortDir } | null>(null);
+  const toggleSort = (key: string) => setSort(s => {
+    if (!s || s.key !== key) return { key, dir: "asc" };
+    if (s.dir === "asc") return { key, dir: "desc" };
+    return null;
+  });
   const [editing, setEditing] = useState<ContaReceber | null>(null);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
@@ -622,7 +688,7 @@ function ContasPage({ drafts, projetos, impostos, onDraftsChanged, spAccount }: 
   };
 
   // Aplica filtros sobre os dados em memória — sem requisição ao SP
-  const applyFilters = useCallback((data: ContaReceber[], f: any) => {
+  const applyFilters = useCallback((data: ContaReceber[], f: any, s: typeof sort) => {
     let r = data;
     if (f.wo)            r = r.filter((x: any) => String(x.wo ?? '').includes(f.wo));
     if (f.cliente_id)    r = r.filter((x: any) => Number(x.cliente_id) === Number(f.cliente_id));
@@ -641,6 +707,7 @@ function ContasPage({ drafts, projetos, impostos, onDraftsChanged, spAccount }: 
     if (f.vl_liquido)    r = r.filter((x: any) => fmt.brl(x.vl_liquido).includes(f.vl_liquido));
     if (f.vencimento)    r = r.filter((x: any) => fmt.date(x.vencimento).includes(f.vencimento));
     if (f.prev_pag)      r = r.filter((x: any) => fmt.date(x.prev_pag).includes(f.prev_pag));
+    if (s) { r = [...r].sort((a: any, b: any) => genericCompare(a[s.key], b[s.key]) * (s.dir === "asc" ? 1 : -1)); }
     setItems(r);
     setTotal({ total: r.length, total_bruto: r.reduce((s, x) => s + (x.vl_bruto || 0), 0), total_liquido: r.reduce((s, x) => s + (x.vl_liquido || 0), 0) });
   }, []);
@@ -659,7 +726,7 @@ function ContasPage({ drafts, projetos, impostos, onDraftsChanged, spAccount }: 
       setDimStatus([...new Set(data.map((x: any) => x.status).filter(Boolean))].sort());
       setDimEscopo([...new Set(data.map((x: any) => x.escopo).filter(Boolean))].sort());
       setDimFatPor([...new Set(data.map((x: any) => x.faturado_por).filter(Boolean))].sort());
-      applyFilters(data, filters);
+      applyFilters(data, filters, sort);
     } catch (e: any) { console.error(e); setLoadError(String(e?.message || e)); }
     finally { setLoading(false); }
   }, []); // sem dependências — nunca recria
@@ -667,19 +734,19 @@ function ContasPage({ drafts, projetos, impostos, onDraftsChanged, spAccount }: 
   // Filtrar = instantâneo na memória, sem rede
   const load = useCallback(() => {
     if (allDataRef.current.length > 0) {
-      applyFilters(allDataRef.current, filters);
+      applyFilters(allDataRef.current, filters, sort);
     } else {
       fetchData();
     }
-  }, [filters, applyFilters, fetchData]);
+  }, [filters, sort, applyFilters, fetchData]);
 
   // Busca inicial e quando login completa
   useEffect(() => { fetchData(); }, [fetchData, spAccount]);
 
-  // Filtra automaticamente sempre que algum campo de filtro muda — instantâneo, sem rede
+  // Filtra/ordena automaticamente sempre que algum campo de filtro ou ordenação muda — instantâneo, sem rede
   useEffect(() => {
-    if (allDataRef.current.length > 0) applyFilters(allDataRef.current, filters);
-  }, [filters, applyFilters]);
+    if (allDataRef.current.length > 0) applyFilters(allDataRef.current, filters, sort);
+  }, [filters, sort, applyFilters]);
 
   const save = async (conta: ContaReceber) => {
     try {
@@ -748,54 +815,50 @@ function ContasPage({ drafts, projetos, impostos, onDraftsChanged, spAccount }: 
               <tr>
                 <th style={{ ...S.th, width: 28 }}></th>
                 <th style={{ ...S.th, width: 90 }}>Ações</th>
-                {["WO", "Draft", "Cliente", "Plataforma", "Doc", "Nº", "Data", "Escopo", "Fat.Por", "Vl. Bruto", "Retido", "Líquido", "Vencimento", "Prev. Pag", "Status"].map(h => <th key={h} style={S.th}>{h}</th>)}
-              </tr>
-              <tr>
-                <th style={S.th}></th>
-                <th style={S.th}></th>
-                {/* WO */}
-                <th style={{ ...S.th, fontWeight: 400 }}><input style={{ ...S.input, padding: "3px 6px", fontSize: 11, width: 60 }} value={filters.wo || ""} onChange={e => setFilters({ ...filters, wo: e.target.value })} /></th>
-                {/* Draft */}
-                <th style={{ ...S.th, fontWeight: 400 }}><input type="number" style={{ ...S.input, padding: "3px 6px", fontSize: 11, width: 60 }} value={filters.draft_codigo || ""} onChange={e => setFilters({ ...filters, draft_codigo: e.target.value })} /></th>
-                {/* Cliente */}
-                <th style={{ ...S.th, fontWeight: 400 }}>
-                  <select style={{ ...S.select, padding: "3px 4px", fontSize: 11, width: 110 }} value={filters.cliente_id || ""} onChange={e => setFilters({ ...filters, cliente_id: e.target.value })}>
+                <FilterHeader label="WO" sortDir={sort?.key==="wo"?sort.dir:null} onSort={() => toggleSort("wo")} active={!!filters.wo} onClear={() => setFilters({ ...filters, wo: "" })}>
+                  <input autoFocus style={{ ...S.input, padding: "3px 6px", fontSize: 12, width: 90 }} value={filters.wo || ""} onChange={e => setFilters({ ...filters, wo: e.target.value })} />
+                </FilterHeader>
+                <FilterHeader label="Draft" sortDir={sort?.key==="draft_codigo"?sort.dir:null} onSort={() => toggleSort("draft_codigo")} active={!!filters.draft_codigo} onClear={() => setFilters({ ...filters, draft_codigo: "" })}>
+                  <input type="number" autoFocus style={{ ...S.input, padding: "3px 6px", fontSize: 12, width: 90 }} value={filters.draft_codigo || ""} onChange={e => setFilters({ ...filters, draft_codigo: e.target.value })} />
+                </FilterHeader>
+                <FilterHeader label="Cliente" sortDir={sort?.key==="cliente"?sort.dir:null} onSort={() => toggleSort("cliente")} active={!!filters.cliente_id} onClear={() => setFilters({ ...filters, cliente_id: "" })}>
+                  <select style={{ ...S.select, padding: "3px 4px", fontSize: 12, width: 130 }} value={filters.cliente_id || ""} onChange={e => setFilters({ ...filters, cliente_id: e.target.value })}>
                     <option value="">Todos</option>
                     {dimClientes.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
                   </select>
-                </th>
-                {/* Plataforma */}
-                <th style={{ ...S.th, fontWeight: 400 }}>
-                  <select style={{ ...S.select, padding: "3px 4px", fontSize: 11, width: 110 }} value={filters.plataforma_id || ""} onChange={e => setFilters({ ...filters, plataforma_id: e.target.value })}>
+                </FilterHeader>
+                <FilterHeader label="Plataforma" sortDir={sort?.key==="plataforma"?sort.dir:null} onSort={() => toggleSort("plataforma")} active={!!filters.plataforma_id} onClear={() => setFilters({ ...filters, plataforma_id: "" })}>
+                  <select style={{ ...S.select, padding: "3px 4px", fontSize: 12, width: 130 }} value={filters.plataforma_id || ""} onChange={e => setFilters({ ...filters, plataforma_id: e.target.value })}>
                     <option value="">Todas</option>
                     {dimPlataformas.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
                   </select>
-                </th>
-                {/* Doc */}
-                <th style={{ ...S.th, fontWeight: 400 }}>
-                  <select style={{ ...S.select, padding: "3px 4px", fontSize: 11, width: 90 }} value={filters.doc || ""} onChange={e => setFilters({ ...filters, doc: e.target.value })}>
+                </FilterHeader>
+                <FilterHeader label="Doc" sortDir={sort?.key==="doc"?sort.dir:null} onSort={() => toggleSort("doc")} active={!!filters.doc} onClear={() => setFilters({ ...filters, doc: "" })}>
+                  <select style={{ ...S.select, padding: "3px 4px", fontSize: 12, width: 110 }} value={filters.doc || ""} onChange={e => setFilters({ ...filters, doc: e.target.value })}>
                     <option value="">Todos</option>
                     {["NFSe", "FAT. LOC.", "DANFE", "NFSe(ex)", "Nota de Débito", "DANFE(ex)", "FAT.LOC.(ex)", "Crédito"].map(s => <option key={s}>{s}</option>)}
                   </select>
-                </th>
-                {/* Nº Doc */}
-                <th style={{ ...S.th, fontWeight: 400 }}><input style={{ ...S.input, padding: "3px 6px", fontSize: 11, width: 70 }} value={filters.num_doc || ""} onChange={e => setFilters({ ...filters, num_doc: e.target.value })} /></th>
-                {/* Data */}
-                <th style={{ ...S.th, fontWeight: 400 }}>
-                  <div style={{ display: "flex", flexDirection: "column" as const, gap: 2 }}>
+                </FilterHeader>
+                <FilterHeader label="Nº" sortDir={sort?.key==="num_doc"?sort.dir:null} onSort={() => toggleSort("num_doc")} active={!!filters.num_doc} onClear={() => setFilters({ ...filters, num_doc: "" })}>
+                  <input autoFocus style={{ ...S.input, padding: "3px 6px", fontSize: 12, width: 90 }} value={filters.num_doc || ""} onChange={e => setFilters({ ...filters, num_doc: e.target.value })} />
+                </FilterHeader>
+                <FilterHeader label="Data" sortDir={sort?.key==="data_doc"?sort.dir:null} onSort={() => toggleSort("data_doc")}
+                  active={!!(filters.data_doc || filters.data_doc_de || filters.data_doc_ate)}
+                  onClear={() => setFilters({ ...filters, data_doc: undefined, data_doc_de: undefined, data_doc_ate: undefined, _mesSel: undefined })}>
+                  <div style={{ display: "flex", flexDirection: "column" as const, gap: 4 }}>
                     <div style={{ display: "flex", gap: 2 }}>
                       {(["Exata","Mês","Período"] as const).map(m => (
                         <button key={m} onClick={() => setFilters({ ...filters, _dataModo: m, data_doc: undefined, data_doc_de: undefined, data_doc_ate: undefined })}
-                          style={{ fontSize: 9, padding: "1px 5px", borderRadius: 5, border: "none", cursor: "pointer", fontWeight: 600,
+                          style={{ fontSize: 10, padding: "2px 6px", borderRadius: 5, border: "none", cursor: "pointer", fontWeight: 600,
                             background: (filters._dataModo || "Exata") === m ? N.accent : N.bg,
                             color: (filters._dataModo || "Exata") === m ? "#fff" : N.muted }}>{m}</button>
                       ))}
                     </div>
                     {(!filters._dataModo || filters._dataModo === "Exata") && (
-                      <input type="date" style={{ ...S.input, padding: "3px 6px", fontSize: 11, width: 120 }} value={filters.data_doc || ""} onChange={e => setFilters({ ...filters, data_doc: e.target.value })} />
+                      <input type="date" style={{ ...S.input, padding: "3px 6px", fontSize: 12, width: 130 }} value={filters.data_doc || ""} onChange={e => setFilters({ ...filters, data_doc: e.target.value })} />
                     )}
                     {filters._dataModo === "Mês" && (
-                      <input type="month" style={{ ...S.input, padding: "3px 6px", fontSize: 11, width: 120 }} value={filters._mesSel || ""} onChange={e => {
+                      <input type="month" style={{ ...S.input, padding: "3px 6px", fontSize: 12, width: 130 }} value={filters._mesSel || ""} onChange={e => {
                         const v = e.target.value;
                         if (!v) { setFilters({ ...filters, _mesSel: "", data_doc_de: undefined, data_doc_ate: undefined }); return; }
                         const [y, m] = v.split("-").map(Number);
@@ -805,43 +868,45 @@ function ContasPage({ drafts, projetos, impostos, onDraftsChanged, spAccount }: 
                     )}
                     {filters._dataModo === "Período" && (
                       <div style={{ display: "flex", gap: 2, alignItems: "center" }}>
-                        <input type="date" style={{ ...S.input, padding: "3px 4px", fontSize: 10, width: 95 }} value={filters.data_doc_de || ""} onChange={e => setFilters({ ...filters, data_doc_de: e.target.value })} />
-                        <input type="date" style={{ ...S.input, padding: "3px 4px", fontSize: 10, width: 95 }} value={filters.data_doc_ate || ""} onChange={e => setFilters({ ...filters, data_doc_ate: e.target.value })} />
+                        <input type="date" style={{ ...S.input, padding: "3px 4px", fontSize: 11, width: 100 }} value={filters.data_doc_de || ""} onChange={e => setFilters({ ...filters, data_doc_de: e.target.value })} />
+                        <input type="date" style={{ ...S.input, padding: "3px 4px", fontSize: 11, width: 100 }} value={filters.data_doc_ate || ""} onChange={e => setFilters({ ...filters, data_doc_ate: e.target.value })} />
                       </div>
                     )}
                   </div>
-                </th>
-                {/* Escopo */}
-                <th style={{ ...S.th, fontWeight: 400 }}>
-                  <select style={{ ...S.select, padding: "3px 4px", fontSize: 11, width: 90 }} value={filters.escopo || ""} onChange={e => setFilters({ ...filters, escopo: e.target.value })}>
+                </FilterHeader>
+                <FilterHeader label="Escopo" sortDir={sort?.key==="escopo"?sort.dir:null} onSort={() => toggleSort("escopo")} active={!!filters.escopo} onClear={() => setFilters({ ...filters, escopo: "" })}>
+                  <select style={{ ...S.select, padding: "3px 4px", fontSize: 12, width: 110 }} value={filters.escopo || ""} onChange={e => setFilters({ ...filters, escopo: e.target.value })}>
                     <option value="">Todos</option>
                     {dimEscopo.map(s => <option key={s}>{s}</option>)}
                   </select>
-                </th>
-                {/* Fat.Por */}
-                <th style={{ ...S.th, fontWeight: 400 }}>
-                  <select style={{ ...S.select, padding: "3px 4px", fontSize: 11, width: 90 }} value={filters.faturado_por || ""} onChange={e => setFilters({ ...filters, faturado_por: e.target.value })}>
+                </FilterHeader>
+                <FilterHeader label="Fat.Por" sortDir={sort?.key==="faturado_por"?sort.dir:null} onSort={() => toggleSort("faturado_por")} active={!!filters.faturado_por} onClear={() => setFilters({ ...filters, faturado_por: "" })}>
+                  <select style={{ ...S.select, padding: "3px 4px", fontSize: 12, width: 100 }} value={filters.faturado_por || ""} onChange={e => setFilters({ ...filters, faturado_por: e.target.value })}>
                     <option value="">Todos</option>
                     {dimFatPor.map(s => <option key={s}>{s}</option>)}
                   </select>
-                </th>
-                {/* Vl.Bruto */}
-                <th style={{ ...S.th, fontWeight: 400 }}><input style={{ ...S.input, padding: "3px 6px", fontSize: 11, width: 80 }} value={filters.vl_bruto || ""} onChange={e => setFilters({ ...filters, vl_bruto: e.target.value })} /></th>
-                {/* Retido */}
-                <th style={{ ...S.th, fontWeight: 400 }}><input style={{ ...S.input, padding: "3px 6px", fontSize: 11, width: 80 }} value={filters.total_retido || ""} onChange={e => setFilters({ ...filters, total_retido: e.target.value })} /></th>
-                {/* Líquido */}
-                <th style={{ ...S.th, fontWeight: 400 }}><input style={{ ...S.input, padding: "3px 6px", fontSize: 11, width: 80 }} value={filters.vl_liquido || ""} onChange={e => setFilters({ ...filters, vl_liquido: e.target.value })} /></th>
-                {/* Vencimento */}
-                <th style={{ ...S.th, fontWeight: 400 }}><input style={{ ...S.input, padding: "3px 6px", fontSize: 11, width: 80 }} placeholder="dd/mm/aaaa" value={filters.vencimento || ""} onChange={e => setFilters({ ...filters, vencimento: e.target.value })} /></th>
-                {/* Prev.Pag */}
-                <th style={{ ...S.th, fontWeight: 400 }}><input style={{ ...S.input, padding: "3px 6px", fontSize: 11, width: 80 }} placeholder="dd/mm/aaaa" value={filters.prev_pag || ""} onChange={e => setFilters({ ...filters, prev_pag: e.target.value })} /></th>
-                {/* Status */}
-                <th style={{ ...S.th, fontWeight: 400 }}>
-                  <select style={{ ...S.select, padding: "3px 4px", fontSize: 11, width: 120 }} value={filters.status || ""} onChange={e => setFilters({ ...filters, status: e.target.value })}>
+                </FilterHeader>
+                <FilterHeader label="Vl. Bruto" sortDir={sort?.key==="vl_bruto"?sort.dir:null} onSort={() => toggleSort("vl_bruto")} active={!!filters.vl_bruto} onClear={() => setFilters({ ...filters, vl_bruto: "" })}>
+                  <input autoFocus style={{ ...S.input, padding: "3px 6px", fontSize: 12, width: 90 }} value={filters.vl_bruto || ""} onChange={e => setFilters({ ...filters, vl_bruto: e.target.value })} />
+                </FilterHeader>
+                <FilterHeader label="Retido" sortDir={sort?.key==="total_retido"?sort.dir:null} onSort={() => toggleSort("total_retido")} active={!!filters.total_retido} onClear={() => setFilters({ ...filters, total_retido: "" })}>
+                  <input autoFocus style={{ ...S.input, padding: "3px 6px", fontSize: 12, width: 90 }} value={filters.total_retido || ""} onChange={e => setFilters({ ...filters, total_retido: e.target.value })} />
+                </FilterHeader>
+                <FilterHeader label="Líquido" sortDir={sort?.key==="vl_liquido"?sort.dir:null} onSort={() => toggleSort("vl_liquido")} active={!!filters.vl_liquido} onClear={() => setFilters({ ...filters, vl_liquido: "" })}>
+                  <input autoFocus style={{ ...S.input, padding: "3px 6px", fontSize: 12, width: 90 }} value={filters.vl_liquido || ""} onChange={e => setFilters({ ...filters, vl_liquido: e.target.value })} />
+                </FilterHeader>
+                <FilterHeader label="Vencimento" sortDir={sort?.key==="vencimento"?sort.dir:null} onSort={() => toggleSort("vencimento")} active={!!filters.vencimento} onClear={() => setFilters({ ...filters, vencimento: "" })}>
+                  <input autoFocus placeholder="dd/mm/aaaa" style={{ ...S.input, padding: "3px 6px", fontSize: 12, width: 100 }} value={filters.vencimento || ""} onChange={e => setFilters({ ...filters, vencimento: e.target.value })} />
+                </FilterHeader>
+                <FilterHeader label="Prev. Pag" sortDir={sort?.key==="prev_pag"?sort.dir:null} onSort={() => toggleSort("prev_pag")} active={!!filters.prev_pag} onClear={() => setFilters({ ...filters, prev_pag: "" })}>
+                  <input autoFocus placeholder="dd/mm/aaaa" style={{ ...S.input, padding: "3px 6px", fontSize: 12, width: 100 }} value={filters.prev_pag || ""} onChange={e => setFilters({ ...filters, prev_pag: e.target.value })} />
+                </FilterHeader>
+                <FilterHeader label="Status" sortDir={sort?.key==="status"?sort.dir:null} onSort={() => toggleSort("status")} active={!!filters.status} onClear={() => setFilters({ ...filters, status: "" })}>
+                  <select style={{ ...S.select, padding: "3px 4px", fontSize: 12, width: 140 }} value={filters.status || ""} onChange={e => setFilters({ ...filters, status: e.target.value })}>
                     <option value="">Todos</option>
                     {dimStatus.map(s => <option key={s}>{s}</option>)}
                   </select>
-                </th>
+                </FilterHeader>
               </tr>
             </thead>
             <tbody>
@@ -1143,17 +1208,24 @@ function CRUDPage<T extends { id?: number }>({ title, icon, endpoint, columns, e
   const [form, setForm] = useState<T>(emptyItem);
   const [delTarget, setDelTarget] = useState<T | null>(null);
   const [colFilters, setColFilters] = useState<Record<string, string>>({});
+  const [sort, setSort] = useState<{ key: string; dir: SortDir } | null>(null);
   const load = () => {
     if (spLoad) { spLoad().then(data => setItems(data)).catch(() => { if (staticData) setItems(staticData); }); return; }
     if (staticData) { setItems(staticData); return; }
     setItems([]);
   };
   useEffect(() => { load(); }, []);
+  const toggleSort = (key: string) => setSort(s => {
+    if (!s || s.key !== key) return { key, dir: "asc" };
+    if (s.dir === "asc") return { key, dir: "desc" };
+    return null;
+  });
   const filtered = items.filter(row => columns.every(c => {
     const f = colFilters[c.key];
     if (!f) return true;
     return String((row as any)[c.key] ?? "").toLowerCase().includes(f.toLowerCase());
   }));
+  if (sort) filtered.sort((a, b) => genericCompare((a as any)[sort.key], (b as any)[sort.key]) * (sort.dir === "asc" ? 1 : -1));
   const setField = (k: keyof T, v: any) => setForm(prev => ({ ...prev, [k]: v }));
   const save = async () => {
     if (spSave) { await spSave(form); setEditing(null); load(); return; }
@@ -1187,19 +1259,18 @@ function CRUDPage<T extends { id?: number }>({ title, icon, endpoint, columns, e
             <thead>
               <tr>
                 {!readOnly && <th style={{ ...S.th, width: 70 }}>Ações</th>}
-                {columns.map(c => <th key={c.key} style={S.th}>{c.label}</th>)}
-              </tr>
-              <tr>
-                {!readOnly && <th style={S.th}></th>}
                 {columns.map(c => (
-                  <th key={c.key} style={{ ...S.th, fontWeight: 400 }}>
+                  <FilterHeader key={c.key} label={c.label}
+                    sortDir={sort?.key === c.key ? sort.dir : null} onSort={() => toggleSort(c.key)}
+                    active={!!colFilters[c.key]} onClear={() => setColFilters(f => ({ ...f, [c.key]: "" }))}>
                     <input
+                      autoFocus
                       value={colFilters[c.key] || ""}
                       onChange={e => setColFilters(f => ({ ...f, [c.key]: e.target.value }))}
                       placeholder="Filtrar..."
-                      style={{ ...S.input, padding: "3px 6px", fontSize: 11 }}
+                      style={{ ...S.input, padding: "3px 6px", fontSize: 12, width: 130 }}
                     />
-                  </th>
+                  </FilterHeader>
                 ))}
               </tr>
             </thead>
@@ -1294,9 +1365,16 @@ async function logAndDelete(_endpoint: string, _id: number, _resumo: string, _re
 function DraftsPage({ onDraftsChanged }: { onDraftsChanged?: () => void }) {
   const [items, setItems] = useState<Draft[]>([]);
   const [f, setF] = useState({ codigo: "", data_draft: "", descricao: "", ativo: "" });
+  const [sort, setSort] = useState<{ key: string; dir: SortDir } | null>(null);
 
   const load = () => { setItems(STATIC_DRAFTS as Draft[]); onDraftsChanged?.(); };
   useEffect(() => { load(); }, []);
+
+  const toggleSort = (key: string) => setSort(s => {
+    if (!s || s.key !== key) return { key, dir: "asc" };
+    if (s.dir === "asc") return { key, dir: "desc" };
+    return null;
+  });
 
   const filtered = items.filter(row =>
     (!f.codigo || String(row.codigo ?? "").includes(f.codigo)) &&
@@ -1304,6 +1382,7 @@ function DraftsPage({ onDraftsChanged }: { onDraftsChanged?: () => void }) {
     (!f.descricao || (row.descricao ?? "").toLowerCase().includes(f.descricao.toLowerCase())) &&
     (!f.ativo || (f.ativo === "sim" ? !!row.ativo : !row.ativo))
   );
+  if (sort) filtered.sort((a, b) => genericCompare((a as any)[sort.key], (b as any)[sort.key]) * (sort.dir === "asc" ? 1 : -1));
 
   return (
     <div style={S.page}>
@@ -1319,20 +1398,24 @@ function DraftsPage({ onDraftsChanged }: { onDraftsChanged?: () => void }) {
           <table style={S.table}>
             <thead>
               <tr>
-                <th style={S.th}>Código</th>
-                <th style={S.th}>Data da Draft</th>
-                <th style={S.th}>Descrição</th>
-                <th style={S.th}>Ativo</th>
-              </tr>
-              <tr>
-                <th style={{ ...S.th, fontWeight: 400 }}><input value={f.codigo} onChange={e => setF({ ...f, codigo: e.target.value })} placeholder="Filtrar..." style={{ ...S.input, padding: "3px 6px", fontSize: 11 }} /></th>
-                <th style={{ ...S.th, fontWeight: 400 }}><input type="date" value={f.data_draft} onChange={e => setF({ ...f, data_draft: e.target.value })} style={{ ...S.input, padding: "3px 6px", fontSize: 11 }} /></th>
-                <th style={{ ...S.th, fontWeight: 400 }}><input value={f.descricao} onChange={e => setF({ ...f, descricao: e.target.value })} placeholder="Filtrar..." style={{ ...S.input, padding: "3px 6px", fontSize: 11 }} /></th>
-                <th style={{ ...S.th, fontWeight: 400 }}>
-                  <select value={f.ativo} onChange={e => setF({ ...f, ativo: e.target.value })} style={{ ...S.select, padding: "3px 6px", fontSize: 11 }}>
+                <FilterHeader label="Código" sortDir={sort?.key === "codigo" ? sort.dir : null} onSort={() => toggleSort("codigo")}
+                  active={!!f.codigo} onClear={() => setF({ ...f, codigo: "" })}>
+                  <input autoFocus value={f.codigo} onChange={e => setF({ ...f, codigo: e.target.value })} placeholder="Filtrar..." style={{ ...S.input, padding: "3px 6px", fontSize: 12, width: 130 }} />
+                </FilterHeader>
+                <FilterHeader label="Data da Draft" sortDir={sort?.key === "data_draft" ? sort.dir : null} onSort={() => toggleSort("data_draft")}
+                  active={!!f.data_draft} onClear={() => setF({ ...f, data_draft: "" })}>
+                  <input type="date" autoFocus value={f.data_draft} onChange={e => setF({ ...f, data_draft: e.target.value })} style={{ ...S.input, padding: "3px 6px", fontSize: 12 }} />
+                </FilterHeader>
+                <FilterHeader label="Descrição" sortDir={sort?.key === "descricao" ? sort.dir : null} onSort={() => toggleSort("descricao")}
+                  active={!!f.descricao} onClear={() => setF({ ...f, descricao: "" })}>
+                  <input autoFocus value={f.descricao} onChange={e => setF({ ...f, descricao: e.target.value })} placeholder="Filtrar..." style={{ ...S.input, padding: "3px 6px", fontSize: 12, width: 130 }} />
+                </FilterHeader>
+                <FilterHeader label="Ativo" sortDir={sort?.key === "ativo" ? sort.dir : null} onSort={() => toggleSort("ativo")}
+                  active={!!f.ativo} onClear={() => setF({ ...f, ativo: "" })}>
+                  <select value={f.ativo} onChange={e => setF({ ...f, ativo: e.target.value })} style={{ ...S.select, padding: "3px 6px", fontSize: 12 }}>
                     <option value="">Todos</option><option value="sim">✅</option><option value="nao">❌</option>
                   </select>
-                </th>
+                </FilterHeader>
               </tr>
             </thead>
             <tbody>
@@ -1838,6 +1921,18 @@ function ProducaoPage() {
   const [form, setForm] = useState<ProducaoItem>({ ...EMPTY_PROD });
   const [delTarget, setDelTarget] = useState<ProducaoItem | null>(null);
   const [colFilters, setColFilters] = useState<Record<string, string>>({});
+  const [sort, setSort] = useState<{ key: string; dir: SortDir } | null>(null);
+  const SORT_FIELD: Record<string, keyof ProducaoItem> = {
+    idwo: "IDWO", wo: "WO_Producao", pais: "ID_Country", ano: "Year_Producao", ef: "E_Or_F",
+    cliente: "Nome_Cliente_Producao", plataforma: "Rig_Producao", categoria: "Contract_Category_Producao",
+    di: "DI_Producao", invoice: "Number_Of_Invoice_Producao", value: "Value_Producao", total: "Total_Producao",
+    wip: "WIP_Producao", ticket: "Ticket_Medio_Producao",
+  };
+  const toggleSort = (key: string) => setSort(s => {
+    if (!s || s.key !== key) return { key, dir: "asc" };
+    if (s.dir === "asc") return { key, dir: "desc" };
+    return null;
+  });
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -1869,6 +1964,7 @@ function ProducaoPage() {
     (!colFilters.wip || String(x.WIP_Producao ?? '').includes(colFilters.wip)) &&
     (!colFilters.ticket || String(x.Ticket_Medio_Producao ?? '').includes(colFilters.ticket))
   );
+  if (sort) filtered.sort((a, b) => genericCompare(a[SORT_FIELD[sort.key]], b[SORT_FIELD[sort.key]]) * (sort.dir === "asc" ? 1 : -1));
 
   const hf = (k: keyof ProducaoItem, v: any) => {
     setForm(prev => {
@@ -1975,54 +2071,59 @@ function ProducaoPage() {
             <thead>
               <tr>
                 <th style={{ ...S.th, width:70 }}>Ações</th>
-                <th style={S.th}>IDWO</th>
-                <th style={S.th}>WO</th>
-                <th style={S.th}>País</th>
-                <th style={S.th}>Mês/Ano</th>
-                <th style={S.th}>E/F</th>
-                <th style={S.th}>Cliente</th>
-                <th style={S.th}>Plataforma</th>
-                <th style={S.th}>Categoria</th>
-                <th style={S.th}>DI</th>
-                <th style={S.th}>Invoice</th>
-                <th style={S.th}>Value</th>
-                <th style={S.th}>Total</th>
-                <th style={S.th}>WIP</th>
-                <th style={S.th}>Ticket Médio</th>
-              </tr>
-              <tr>
-                <th style={S.th}></th>
-                <th style={{ ...S.th, fontWeight:400 }}><input value={colFilters.idwo||""} onChange={e => setColFilter("idwo", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:11 }} /></th>
-                <th style={{ ...S.th, fontWeight:400 }}><input value={colFilters.wo||""} onChange={e => setColFilter("wo", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:11 }} /></th>
-                <th style={{ ...S.th, fontWeight:400 }}>
-                  <select value={colFilters.pais||""} onChange={e => setColFilter("pais", e.target.value)} style={{ ...S.select, padding:"3px 6px", fontSize:11 }}>
+                <FilterHeader label="IDWO" sortDir={sort?.key==="idwo"?sort.dir:null} onSort={() => toggleSort("idwo")} active={!!colFilters.idwo} onClear={() => setColFilter("idwo","")}>
+                  <input autoFocus value={colFilters.idwo||""} onChange={e => setColFilter("idwo", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:12, width:110 }} />
+                </FilterHeader>
+                <FilterHeader label="WO" sortDir={sort?.key==="wo"?sort.dir:null} onSort={() => toggleSort("wo")} active={!!colFilters.wo} onClear={() => setColFilter("wo","")}>
+                  <input autoFocus value={colFilters.wo||""} onChange={e => setColFilter("wo", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:12, width:100 }} />
+                </FilterHeader>
+                <FilterHeader label="País" sortDir={sort?.key==="pais"?sort.dir:null} onSort={() => toggleSort("pais")} active={!!colFilters.pais} onClear={() => setColFilter("pais","")}>
+                  <select value={colFilters.pais||""} onChange={e => setColFilter("pais", e.target.value)} style={{ ...S.select, padding:"3px 6px", fontSize:12 }}>
                     <option value="">Todos</option>
                     {Object.entries(PAISES_PROD).map(([id,label]) => <option key={id} value={id}>{label}</option>)}
                   </select>
-                </th>
-                <th style={{ ...S.th, fontWeight:400 }}>
+                </FilterHeader>
+                <FilterHeader label="Mês/Ano" sortDir={sort?.key==="ano"?sort.dir:null} onSort={() => toggleSort("ano")} active={!!(colFilters.mes||colFilters.ano)} onClear={() => setColFilters(f => ({ ...f, mes:"", ano:"" }))}>
                   <div style={{ display:"flex", gap:2 }}>
-                    <select value={colFilters.mes||""} onChange={e => setColFilter("mes", e.target.value)} style={{ ...S.select, padding:"3px 4px", fontSize:11, width:64 }}>
+                    <select value={colFilters.mes||""} onChange={e => setColFilter("mes", e.target.value)} style={{ ...S.select, padding:"3px 4px", fontSize:12, width:64 }}>
                       <option value="">Mês</option>
                       {MESES_PT.slice(1).map((m,i) => <option key={i+1} value={i+1}>{m}</option>)}
                     </select>
-                    <input value={colFilters.ano||""} onChange={e => setColFilter("ano", e.target.value)} placeholder="Ano" style={{ ...S.input, padding:"3px 6px", fontSize:11, width:60 }} />
+                    <input value={colFilters.ano||""} onChange={e => setColFilter("ano", e.target.value)} placeholder="Ano" style={{ ...S.input, padding:"3px 6px", fontSize:12, width:60 }} />
                   </div>
-                </th>
-                <th style={{ ...S.th, fontWeight:400 }}>
-                  <select value={colFilters.ef||""} onChange={e => setColFilter("ef", e.target.value)} style={{ ...S.select, padding:"3px 6px", fontSize:11 }}>
+                </FilterHeader>
+                <FilterHeader label="E/F" sortDir={sort?.key==="ef"?sort.dir:null} onSort={() => toggleSort("ef")} active={!!colFilters.ef} onClear={() => setColFilter("ef","")}>
+                  <select value={colFilters.ef||""} onChange={e => setColFilter("ef", e.target.value)} style={{ ...S.select, padding:"3px 6px", fontSize:12 }}>
                     <option value="">Todos</option><option value="E">E</option><option value="F">F</option>
                   </select>
-                </th>
-                <th style={{ ...S.th, fontWeight:400 }}><input value={colFilters.cliente||""} onChange={e => setColFilter("cliente", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:11 }} /></th>
-                <th style={{ ...S.th, fontWeight:400 }}><input value={colFilters.plataforma||""} onChange={e => setColFilter("plataforma", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:11 }} /></th>
-                <th style={{ ...S.th, fontWeight:400 }}><input value={colFilters.categoria||""} onChange={e => setColFilter("categoria", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:11 }} /></th>
-                <th style={{ ...S.th, fontWeight:400 }}><input value={colFilters.di||""} onChange={e => setColFilter("di", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:11 }} /></th>
-                <th style={{ ...S.th, fontWeight:400 }}><input value={colFilters.invoice||""} onChange={e => setColFilter("invoice", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:11 }} /></th>
-                <th style={{ ...S.th, fontWeight:400 }}><input value={colFilters.value||""} onChange={e => setColFilter("value", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:11 }} /></th>
-                <th style={{ ...S.th, fontWeight:400 }}><input value={colFilters.total||""} onChange={e => setColFilter("total", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:11 }} /></th>
-                <th style={{ ...S.th, fontWeight:400 }}><input value={colFilters.wip||""} onChange={e => setColFilter("wip", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:11 }} /></th>
-                <th style={{ ...S.th, fontWeight:400 }}><input value={colFilters.ticket||""} onChange={e => setColFilter("ticket", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:11 }} /></th>
+                </FilterHeader>
+                <FilterHeader label="Cliente" sortDir={sort?.key==="cliente"?sort.dir:null} onSort={() => toggleSort("cliente")} active={!!colFilters.cliente} onClear={() => setColFilter("cliente","")}>
+                  <input autoFocus value={colFilters.cliente||""} onChange={e => setColFilter("cliente", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:12, width:130 }} />
+                </FilterHeader>
+                <FilterHeader label="Plataforma" sortDir={sort?.key==="plataforma"?sort.dir:null} onSort={() => toggleSort("plataforma")} active={!!colFilters.plataforma} onClear={() => setColFilter("plataforma","")}>
+                  <input autoFocus value={colFilters.plataforma||""} onChange={e => setColFilter("plataforma", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:12, width:130 }} />
+                </FilterHeader>
+                <FilterHeader label="Categoria" sortDir={sort?.key==="categoria"?sort.dir:null} onSort={() => toggleSort("categoria")} active={!!colFilters.categoria} onClear={() => setColFilter("categoria","")}>
+                  <input autoFocus value={colFilters.categoria||""} onChange={e => setColFilter("categoria", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:12, width:110 }} />
+                </FilterHeader>
+                <FilterHeader label="DI" sortDir={sort?.key==="di"?sort.dir:null} onSort={() => toggleSort("di")} active={!!colFilters.di} onClear={() => setColFilter("di","")}>
+                  <input autoFocus value={colFilters.di||""} onChange={e => setColFilter("di", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:12, width:90 }} />
+                </FilterHeader>
+                <FilterHeader label="Invoice" sortDir={sort?.key==="invoice"?sort.dir:null} onSort={() => toggleSort("invoice")} active={!!colFilters.invoice} onClear={() => setColFilter("invoice","")}>
+                  <input autoFocus value={colFilters.invoice||""} onChange={e => setColFilter("invoice", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:12, width:90 }} />
+                </FilterHeader>
+                <FilterHeader label="Value" sortDir={sort?.key==="value"?sort.dir:null} onSort={() => toggleSort("value")} active={!!colFilters.value} onClear={() => setColFilter("value","")}>
+                  <input autoFocus value={colFilters.value||""} onChange={e => setColFilter("value", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:12, width:100 }} />
+                </FilterHeader>
+                <FilterHeader label="Total" sortDir={sort?.key==="total"?sort.dir:null} onSort={() => toggleSort("total")} active={!!colFilters.total} onClear={() => setColFilter("total","")}>
+                  <input autoFocus value={colFilters.total||""} onChange={e => setColFilter("total", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:12, width:100 }} />
+                </FilterHeader>
+                <FilterHeader label="WIP" sortDir={sort?.key==="wip"?sort.dir:null} onSort={() => toggleSort("wip")} active={!!colFilters.wip} onClear={() => setColFilter("wip","")}>
+                  <input autoFocus value={colFilters.wip||""} onChange={e => setColFilter("wip", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:12, width:100 }} />
+                </FilterHeader>
+                <FilterHeader label="Ticket Médio" sortDir={sort?.key==="ticket"?sort.dir:null} onSort={() => toggleSort("ticket")} active={!!colFilters.ticket} onClear={() => setColFilter("ticket","")}>
+                  <input autoFocus value={colFilters.ticket||""} onChange={e => setColFilter("ticket", e.target.value)} placeholder="Filtrar..." style={{ ...S.input, padding:"3px 6px", fontSize:12, width:100 }} />
+                </FilterHeader>
               </tr>
             </thead>
             <tbody>
