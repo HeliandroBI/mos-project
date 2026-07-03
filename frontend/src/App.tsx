@@ -888,6 +888,13 @@ function toSpConta(fields: Record<string, any>): Record<string, any> {
     EditorId, OData__UIVersionString, Attachments, GUID, Title, __metadata,
     ...rest
   } = fields;
+  // Campos de navegação/lookup (Author, Editor, RoleAssignments, AttachmentFiles...) vêm do
+  // GET verbose como { __deferred: { uri } } — o SharePoint rejeita esse formato num POST/MERGE,
+  // então tira qualquer propriedade nesse formato em vez de listar cada nome manualmente.
+  for (const key of Object.keys(rest)) {
+    const v = rest[key];
+    if (v && typeof v === "object" && "__deferred" in v) delete rest[key];
+  }
   return wo != null ? { ...rest, Title: String(wo) } : rest;
 }
 
