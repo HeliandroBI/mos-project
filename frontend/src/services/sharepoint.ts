@@ -32,7 +32,14 @@ export function initMsal(): Promise<void> {
 }
 
 export function getSpAccount() {
-  return msalInstance.getActiveAccount() ?? msalInstance.getAllAccounts()[0] ?? null;
+  // Se o MSAL ainda não terminou de inicializar (initMsal() em andamento), qualquer
+  // chamada aqui lança "uninitialized_public_client_application" — nesse caso não há
+  // conta logada mesmo, então simplesmente reporta null em vez de quebrar a tela.
+  try {
+    return msalInstance.getActiveAccount() ?? msalInstance.getAllAccounts()[0] ?? null;
+  } catch {
+    return null;
+  }
 }
 
 let loginPromise: Promise<void> | null = null;
@@ -54,6 +61,7 @@ export async function logoutSharePoint() {
 }
 
 export async function getToken(): Promise<string> {
+  await initMsal(); // garante que MSAL está inicializado antes de qualquer operação
   const account = getSpAccount();
   if (!account) throw new Error('Não autenticado no SharePoint');
   try {
