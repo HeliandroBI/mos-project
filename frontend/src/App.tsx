@@ -638,6 +638,17 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraft
     setForm(next);
   };
 
+  // WOs do catálogo Qualitech (628) que ainda não aparecem em spWOs/projetos —
+  // sem isso ficam indisponíveis no <select>, mesmo cadastradas na Qualitech
+  const qtOnlyOptions = useMemo(() => {
+    const known = new Set<number>([
+      ...(spAccount ? spWOs.map(item => parseInt(item.WO || item.wo)) : []),
+      ...projetos.map(p => p.wo),
+    ]);
+    return (STATIC_QUALTECH_PROJECTS as { project_number: number; cliente: string; plataforma: string }[])
+      .filter(p => !known.has(p.project_number));
+  }, [spAccount, spWOs, projetos]);
+
   const applyWO = (woNum: number) => {
     // Vl. Diária / Vl. Diária Locação só existem na lista Projetos/WO — busca sempre lá,
     // independente de onde vier Cliente/Plataforma (SharePoint ListaWOs não tem esses campos)
@@ -645,23 +656,26 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraft
     const pd = { vl_diaria: proj?.vl_diaria, vl_diaria_locacao: proj?.vl_diaria_locacao, vl_outros: proj?.vl_outros };
     setProjData(pd);
 
-    // Try SharePoint first if logged in
-    if (spAccount && spWOs.length > 0) {
-      const spItem = spWOs.find(item => parseInt(item.WO || item.wo) === woNum);
-      if (spItem) {
-        const cliente = spItem.Client || spItem.cliente || '';
-        const plataforma = spItem.Rig || spItem.plataforma || '';
-        const updated = { ...form, wo: woNum, cliente, plataforma, coord_focal: form.coord_focal };
-        const newVl = calcVlBruto(updated, pd);
-        if (newVl != null) updated.vl_bruto = +newVl.toFixed(2);
-        setForm({ ...updated, ...calcImpostos(updated, impostos), ...calcPrazos(updated) });
-        return;
-      }
-    }
+    // Catálogo Qualitech (628 WOs) é a fonte mais completa de Cliente/Plataforma —
+    // usado como fallback sempre que ListaWOs/Projetos-WO vierem vazios ou sem o WO
+    const qtProj = (STATIC_QUALTECH_PROJECTS as { project_number: number; cliente: string; plataforma: string }[])
+      .find(p => p.project_number === woNum);
 
-    // Fall back to backend projetos
-    if (!proj) return;
-    const updated = { ...form, wo: woNum, cliente: proj.cliente, plataforma: proj.plataforma, coord_focal: proj.coordenador };
+    let cliente = "", plataforma = "", coord_focal = form.coord_focal;
+
+    const spItem = spAccount ? spWOs.find(item => parseInt(item.WO || item.wo) === woNum) : undefined;
+    if (spItem) {
+      cliente = spItem.Client || spItem.cliente || '';
+      plataforma = spItem.Rig || spItem.plataforma || '';
+    } else if (proj) {
+      cliente = proj.cliente || '';
+      plataforma = proj.plataforma || '';
+      coord_focal = proj.coordenador;
+    }
+    if (!cliente) cliente = qtProj?.cliente || '';
+    if (!plataforma) plataforma = qtProj?.plataforma || '';
+
+    const updated = { ...form, wo: woNum, cliente, plataforma, coord_focal };
     const newVl = calcVlBruto(updated, pd);
     if (newVl != null) updated.vl_bruto = +newVl.toFixed(2);
     setForm({ ...updated, ...calcImpostos(updated, impostos), ...calcPrazos(updated) });
@@ -733,6 +747,10 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraft
                 ) : null}
                 {projetos.map(p => (
                   <option key={p.wo} value={p.wo}>{p.wo}{p.cliente ? ` — ${p.cliente}` : ""}{p.plataforma ? ` · ${p.plataforma}` : ""}</option>
+                ))}
+                {qtOnlyOptions.length > 0 && <option disabled>─── Catálogo Qualitech ───</option>}
+                {qtOnlyOptions.map(p => (
+                  <option key={`qt-${p.project_number}`} value={p.project_number}>{p.project_number}{p.cliente ? ` — ${p.cliente}` : ""}{p.plataforma ? ` · ${p.plataforma}` : ""}</option>
                 ))}
               </select>
             </Field>
@@ -1369,7 +1387,7 @@ function CRUDPage<T extends { id?: number }>({ title, icon, endpoint, columns, e
   title: string; icon: string; endpoint: string; info?: string;
   columns: { key: string; label: string; render?: (v: any, row: T) => React.ReactNode }[];
   emptyItem: T; renderForm: (form: T, set: (k: keyof T, v: any) => void) => React.ReactNode;
-  extraButton?: (reload: () => void) => React.ReactNode;
+  extraButton?: (reload: () => void, items: T[]) => React.ReactNode;
   staticData?: T[];
   spLoad?: () => Promise<T[]>;
   spSave?: (form: T) => Promise<void>;
@@ -1425,6 +1443,7 @@ function CRUDPage<T extends { id?: number }>({ title, icon, endpoint, columns, e
           <div style={{ display: "flex", gap: 6 }}>
             {Object.values(colFilters).some(Boolean) && <button style={btn("#64748b")} onClick={() => setColFilters({})}>✕ Limpar filtros</button>}
             <button style={btn("#6366f1")} onClick={() => exportCSV(`${endpoint}.csv`, columns, filtered)} title="Exportar dados para importar no SharePoint">⬇ Exportar CSV</button>
+            {extraButton && extraButton(load, items)}
             {!readOnly && <button style={btn("#059669")} onClick={() => { setForm({ ...emptyItem }); setEditing({ ...emptyItem }); }}>➕ Novo</button>}
           </div>
         </div>
@@ -2898,6 +2917,23 @@ export default function App() {
         readOnly={nivel("projetos") !== "editar"}
         staticData={STATIC_PROJETOS_RAW as Projeto[]}
         spLoad={listProjetosFromSP}
+        extraButton={isAdmin ? (reload, items) => {
+          const semDiaria = items.filter(p => p.vl_diaria == null && p.vl_diaria_locacao == null && p.vl_outros == null);
+          return (
+            <button style={btn("#dc2626")} disabled={semDiaria.length === 0} title="Apaga definitivamente da lista SharePoint 'projetosdiarias' os projetos sem nenhum valor de diária"
+              onClick={async () => {
+                if (semDiaria.length === 0) return;
+                if (!confirm(`Isso vai APAGAR PERMANENTEMENTE ${semDiaria.length} projetos sem diária cadastrada, direto na lista SharePoint "projetosdiarias".\n\nEssa ação não pode ser desfeita. Confirma?`)) return;
+                let ok = 0, fail = 0;
+                for (const p of semDiaria) {
+                  if (p.id == null) continue;
+                  try { await deleteProjeto(p.id); ok++; } catch (e) { fail++; console.error("Falha ao apagar", p.wo, e); }
+                }
+                alert(`Concluído: ${ok} removidos${fail ? `, ${fail} falharam (veja o console)` : ""}.`);
+                reload();
+              }}>🗑 Apagar sem diária ({semDiaria.length})</button>
+          );
+        } : undefined}
         spSave={async (f) => { if (f.id) await updateProjeto(f.id, f); else await createProjeto(f); }}
         spDelete={deleteProjeto}
         columns={[
