@@ -707,7 +707,7 @@ export async function createConta(data: Record<string, any>): Promise<any> {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/json;odata=nometadata',
       Accept: 'application/json;odata=nometadata',
       'X-RequestDigest': digest,
     },
@@ -728,7 +728,7 @@ export async function updateConta(id: number, data: Record<string, any>): Promis
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/json;odata=nometadata',
       Accept: 'application/json;odata=nometadata',
       'X-RequestDigest': digest,
       'X-HTTP-Method': 'MERGE',
