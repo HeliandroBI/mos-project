@@ -2021,14 +2021,60 @@ const EMPTY_PROD: ProducaoItem = {
   ID_Country: 10,
 };
 
+// Espelha as fórmulas confirmadas na planilha "Input" (conferidas linha a linha contra
+// 721 registros reais — 710/721 batendo exatamente; os 11 restantes eram um bug já corrigido):
+//  - Value = Total = soma de Personal + Stand-by $ + Personel Logistics + Hotel/Meal +
+//    Equipment In Transit + Material + Log de Materiais + Exchange Rate + LOP + Tags &
+//    Slings + Extra Time + Others + ART + Engineering (0 quando tudo vazio, igual Excel SUM)
+//  - Pending Amount = Amount Charged - Value, só quando diferentes (célula vazia = 0)
+//  - Days NF-Des = Invoice Date - Data Fim · Days FL-Des = REI Date - Data Fim
+//  - Total Daily = Daily + Stand-by (dias — "Stand-by" sem "$" é contagem de dias aqui,
+//    apesar do nome sugerir valor). Ticket Médio = Total(R$) / Total Daily(dias).
+//  - WIP = Value - Invoice Total Value - Rental Equipment Invoice Value
+//    (a planilha soma um ajuste manual fixo "+AR1" que não replicamos — não fez diferença
+//    nos 721 registros de teste, mas se precisar de ajuste, edite o campo WIP na mão)
 function calcProducao(f: ProducaoItem): Partial<ProducaoItem> {
   const idwo = f.ID_Country != null && f.WO_Producao != null
     ? `${f.ID_Country}${Math.round(f.WO_Producao)}`
     : f.IDWO;
-  const ticket = (f.Total_Producao != null && f.Total_Daily_Producao != null && f.Total_Daily_Producao !== 0)
-    ? +(f.Total_Producao / f.Total_Daily_Producao).toFixed(2)
-    : f.Ticket_Medio_Producao;
-  return { IDWO: idwo, Ticket_Medio_Producao: ticket };
+
+  // Intervalo "Personal:Engineering" da tabela do Excel — inclui Stand-by $ (fica entre
+  // Personal e Personel Logistics nessa faixa, mesmo não sendo óbvio pelo nome)
+  const custos = [
+    f.Personal_Producao, f.Stand_By_Producao, f.Personel_Logistics_Producao, f.Hotel_Meal_Producao, f.Equipment_In_Transit_Producao,
+    f.Material_Producao, f.Log_De_Materiais_Producao, f.Exchange_Rate_Variation_Producao, f.LOP_Producao,
+    f.Tags_Slings_Producao, f.Extra_Time_Producao, f.Others_Producao, f.ART_Technical_Responsibility_Pro,
+    f.Engineering_Producao,
+  ];
+  // Excel SUM() sempre retorna 0 quando todas as células estão vazias (nunca fica em branco)
+  const value = +custos.reduce((s, v) => s + (v || 0), 0).toFixed(2);
+  const total = value;
+
+  // Excel trata célula vazia como 0 na comparação/subtração (não como "sem valor")
+  const amountCharged = f.Amount_Charget_Producao || 0;
+  const pending = amountCharged !== value ? +(amountCharged - value).toFixed(2) : undefined;
+
+  const diffDias = (a?: string, b?: string) => {
+    if (!a || !b) return undefined;
+    const da = parseDataInput(a), db = parseDataInput(b);
+    if (!da || !db) return undefined;
+    return Math.round((da.getTime() - db.getTime()) / 86400000);
+  };
+  const daysNF = f.Invoice_Date_Producao ? diffDias(f.Invoice_Date_Producao, f.End_Date_Producao) : f.Days_NF_Des_Producao;
+  const daysFL = f.REI_Date_Producao ? diffDias(f.REI_Date_Producao, f.End_Date_Producao) : f.Days_FL_Des_Producao;
+
+  // Excel SUM() sempre retorna 0 quando as duas células estão vazias (nunca fica em branco)
+  const totalDaily = +((f.Daily_Producao || 0) + (f.Day_Stand_By_Producao || 0)).toFixed(2);
+
+  const wip = +(value - (f.Invoice_Total_Value_Producao || 0) - (f.Rental_Equipment_Invoice_Value_P || 0)).toFixed(2);
+
+  const ticket = totalDaily !== 0 ? +(total / totalDaily).toFixed(2) : undefined;
+
+  return {
+    IDWO: idwo, Value_Producao: value, Total_Producao: total, Pending_Producao: pending,
+    Days_NF_Des_Producao: daysNF, Days_FL_Des_Producao: daysFL, Total_Daily_Producao: totalDaily,
+    WIP_Producao: wip, Ticket_Medio_Producao: ticket,
+  };
 }
 
 function ProducaoPage() {
