@@ -9,7 +9,57 @@ import STATIC_QUALTECH_PROJECTS from "./staticQualtechProjects.json";
 
 
 type Tab = "contas" | "dashboard" | "impostos" | "clientes" | "projetos" | "drafts" | "feriados"
-         | "qualtech_projects" | "producao";
+         | "qualtech_projects" | "producao" | "permissionamento";
+
+// ===== PERMISSIONAMENTO POR PÁGINA (fixo no código — para alterar, peça a mudança e o deploy) =====
+type NivelAcesso = "nenhum" | "ver" | "editar";
+
+// Único admin com acesso à tela de Permissionamento — sempre tem acesso total a tudo.
+const ADMIN_EMAIL = "bi@qualitechirm.com";
+
+// Setor de cada usuário, por email (minúsculas). Adicione novas pessoas aqui.
+const SETOR_POR_EMAIL: Record<string, string> = {
+  [ADMIN_EMAIL]: "Administração",
+};
+
+const PAGINAS_INFO: { key: Tab; label: string }[] = [
+  { key: "dashboard", label: "📊 Dashboard" },
+  { key: "contas", label: "📋 Contas a Receber" },
+  { key: "producao", label: "🏭 Production Projects" },
+  { key: "impostos", label: "⚙️ Impostos" },
+  { key: "clientes", label: "👥 Clientes / Prazos" },
+  { key: "projetos", label: "🏗 Projetos (WO)" },
+  { key: "drafts", label: "📝 Drafts" },
+  { key: "feriados", label: "📅 Feriados" },
+  { key: "qualtech_projects", label: "🌐 Qualtech · Projects" },
+];
+
+// Nível de acesso por página: "padrao" vale pra quem não tem regra específica de setor/email.
+// "porSetor"/"porEmail" sobrepõem o padrão (email individual tem prioridade sobre setor).
+const ACESSO_PAGINAS: Record<Tab, { padrao: NivelAcesso; porSetor?: Record<string, NivelAcesso>; porEmail?: Record<string, NivelAcesso> }> = {
+  dashboard: { padrao: "editar" },
+  contas: { padrao: "editar" },
+  producao: { padrao: "editar" },
+  impostos: { padrao: "ver" },
+  clientes: { padrao: "ver" },
+  projetos: { padrao: "editar" },
+  drafts: { padrao: "ver" },
+  feriados: { padrao: "ver" },
+  qualtech_projects: { padrao: "editar" },
+  permissionamento: { padrao: "nenhum" }, // só o ADMIN_EMAIL vê essa aba, tratado à parte
+};
+
+function getNivelAcesso(page: Tab, email?: string | null): NivelAcesso {
+  const e = (email || "").toLowerCase().trim();
+  if (!e) return "nenhum";
+  if (e === ADMIN_EMAIL) return "editar";
+  const cfg = ACESSO_PAGINAS[page];
+  if (!cfg) return "nenhum";
+  if (cfg.porEmail?.[e]) return cfg.porEmail[e];
+  const setor = SETOR_POR_EMAIL[e];
+  if (setor && cfg.porSetor?.[setor]) return cfg.porSetor[setor];
+  return cfg.padrao;
+}
 
 const STATIC_IMPOSTOS: Imposto[] = [
   { id:1,  nome:"COFINS", tipo:"retido_fonte", tipo_documento:"NFSe",  tipo_servico:undefined, cidade:undefined, aliquota:0.03,   vigencia_inicio:"2020-01-01", ativo:true },
@@ -816,7 +866,7 @@ function toSpConta(fields: Record<string, any>): Record<string, any> {
 }
 
 // ===== CONTAS PAGE =====
-function ContasPage({ drafts, projetos, impostos, onDraftsChanged, spAccount }: { drafts: Draft[]; projetos: Projeto[]; impostos: Imposto[]; onDraftsChanged?: () => void; spAccount?: { name?: string; username?: string } | null }) {
+function ContasPage({ drafts, projetos, impostos, onDraftsChanged, spAccount, readOnly }: { drafts: Draft[]; projetos: Projeto[]; impostos: Imposto[]; onDraftsChanged?: () => void; spAccount?: { name?: string; username?: string } | null; readOnly?: boolean }) {
   const [items, setItems] = useState<ContaReceber[]>([]);
   const [total, setTotal] = useState({ total: 0, total_bruto: 0, total_liquido: 0 });
   const [filters, setFilters] = useState<any>({});
@@ -956,10 +1006,10 @@ function ContasPage({ drafts, projetos, impostos, onDraftsChanged, spAccount }: 
           <span style={S.cardTitle}>📋 Contas a Receber · {total.total}{allDataRef.current.length !== total.total ? ` de ${allDataRef.current.length}` : ""} registros {loading && "⏳"}</span>
           <div style={{ display: "flex", gap: 5 }}>
             {Object.entries(filters).some(([k,v]) => !k.startsWith("_") && v) && <button style={btn("#64748b")} onClick={() => setFilters({})}>✕ Limpar filtros</button>}
-            <button style={btn("#059669")} onClick={() => setEditing({})}>➕ Novo</button>
-            <button style={btn("#0891b2")} title="Recalcula VL.Bruto, impostos, Vencimento, Prev.Fat e Prev.Pag de todos os registros" onClick={() => {
+            {!readOnly && <button style={btn("#059669")} onClick={() => setEditing({})}>➕ Novo</button>}
+            {!readOnly && <button style={btn("#0891b2")} title="Recalcula VL.Bruto, impostos, Vencimento, Prev.Fat e Prev.Pag de todos os registros" onClick={() => {
               alert("Recálculo disponível apenas com backend ativo.");
-            }}>⟳ Recalcular Tudo</button>
+            }}>⟳ Recalcular Tudo</button>}
             <button style={btn("#6366f1")} onClick={async () => {
               try {
                 const token = await getToken();
@@ -970,7 +1020,7 @@ function ContasPage({ drafts, projetos, impostos, onDraftsChanged, spAccount }: 
                 alert('Campos fContasReceber:\n\n' + fields.join('\n'));
               } catch(e: any) { alert('Erro: ' + e.message); }
             }}>🔍 Ver campos SP</button>
-            <label style={{ ...btn("#f59e0b"), cursor: "pointer" }}>📤 Importar CSV<input type="file" accept=".csv" style={{ display: "none" }} onChange={uploadCSV} /></label>
+            {!readOnly && <label style={{ ...btn("#f59e0b"), cursor: "pointer" }}>📤 Importar CSV<input type="file" accept=".csv" style={{ display: "none" }} onChange={uploadCSV} /></label>}
           </div>
         </div>
         <div style={{ overflowX: "auto" }}>
@@ -1045,9 +1095,11 @@ function ContasPage({ drafts, projetos, impostos, onDraftsChanged, spAccount }: 
                   <tr key={row.id} style={{ background: i % 2 === 0 ? N.card : N.bg }}>
                     <td style={S.td}><button onClick={() => setExpanded(isExp ? null : row.id!)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12 }}>{isExp ? "▼" : "▶"}</button></td>
                     <td style={S.td}><div style={{ display: "flex", gap: 2 }}>
-                      <button style={btnSm(N.accent)} title="Editar" onClick={() => setEditing(row)}>✏️</button>
-                      <button style={btnSm("#f59e0b")} title="Duplicar registro" onClick={() => duplicate(row)}>⧉</button>
-                      <button style={btnSm("#dc2626")} title="Excluir" onClick={() => setDelTarget(row)}>🗑</button>
+                      {readOnly ? <span style={{ color: N.muted, fontSize: 11 }}>—</span> : <>
+                        <button style={btnSm(N.accent)} title="Editar" onClick={() => setEditing(row)}>✏️</button>
+                        <button style={btnSm("#f59e0b")} title="Duplicar registro" onClick={() => duplicate(row)}>⧉</button>
+                        <button style={btnSm("#dc2626")} title="Excluir" onClick={() => setDelTarget(row)}>🗑</button>
+                      </>}
                     </div></td>
                     <td style={{ ...S.td, fontWeight: 700 }}>{row.wo || "-"}</td>
                     <td style={S.td}>{row.draft_codigo || row.draft_id || "-"}</td>
@@ -2077,7 +2129,7 @@ function calcProducao(f: ProducaoItem): Partial<ProducaoItem> {
   };
 }
 
-function ProducaoPage() {
+function ProducaoPage({ readOnly }: { readOnly?: boolean }) {
   const [items, setItems] = useState<ProducaoItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -2352,10 +2404,10 @@ function ProducaoPage() {
           <span style={S.cardTitle}>🏭 Production Projects · {filtered.length}{filtered.length !== items.length ? ` de ${items.length}` : ""} registros {loading && "⏳"}</span>
           <div style={{ display:"flex", gap:5 }}>
             {Object.values(colFilters).some(Boolean) && <button style={btn("#64748b")} onClick={clearColFilters}>✕ Limpar filtros</button>}
-            <button style={btn("#059669")} onClick={() => { const f = { ...EMPTY_PROD }; setForm({ ...f, ...calcProducao(f) }); setEditing(f); }}>➕ Novo</button>
+            {!readOnly && <button style={btn("#059669")} onClick={() => { const f = { ...EMPTY_PROD }; setForm({ ...f, ...calcProducao(f) }); setEditing(f); }}>➕ Novo</button>}
             <button style={btn("#6366f1")} onClick={() => exportCSV("bd_producao.csv", csvCols, filtered)}>⬇ CSV</button>
-            <input ref={fileInputRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }} onChange={handleImportFile} />
-            <button style={btn("#f59e0b")} onClick={() => fileInputRef.current?.click()} title="Substitui TODOS os registros pelos da planilha (aba Input)">📤 Importar Planilha</button>
+            {!readOnly && <input ref={fileInputRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }} onChange={handleImportFile} />}
+            {!readOnly && <button style={btn("#f59e0b")} onClick={() => fileInputRef.current?.click()} title="Substitui TODOS os registros pelos da planilha (aba Input)">📤 Importar Planilha</button>}
             <button style={btn("#0891b2")} onClick={load} disabled={loading}>↺ {loading ? "⏳" : ""}</button>
           </div>
         </div>
@@ -2394,8 +2446,10 @@ function ProducaoPage() {
               {filtered.map((row, i) => (
                 <tr key={row.id ?? i} style={{ background: i%2===0 ? N.card : N.bg }}>
                   <td style={S.td}><div style={{ display:"flex", gap:2 }}>
-                    <button style={btnSm(N.accent)} onClick={() => { setForm({...row}); setEditing(row); }}>✏️</button>
-                    <button style={btnSm("#dc2626")} onClick={() => setDelTarget(row)}>🗑</button>
+                    {readOnly ? <span style={{ color: N.muted, fontSize: 11 }}>—</span> : <>
+                      <button style={btnSm(N.accent)} onClick={() => { setForm({...row}); setEditing(row); }}>✏️</button>
+                      <button style={btnSm("#dc2626")} onClick={() => setDelTarget(row)}>🗑</button>
+                    </>}
                   </div></td>
                   <td style={{ ...S.td, fontWeight:700 }}>{row.IDWO || "—"}</td>
                   <td style={{ ...S.td, fontWeight:700 }}>{row.WO_Producao || "—"}</td>
@@ -2656,6 +2710,12 @@ export default function App() {
   const [dashPage, setDashPage] = useState<string>("status");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [spAccount, setSpAccount] = useState<{ name?: string; username?: string } | null>(null);
+  const userEmail = spAccount?.username || null;
+  const isAdmin = (userEmail || "").toLowerCase().trim() === ADMIN_EMAIL;
+  // Antes do login ainda não sabemos o setor da pessoa — mostra tudo normalmente (cada
+  // página já tem sua própria mensagem de "faça login"); a restrição por setor só entra
+  // em vigor depois que a pessoa loga e a gente sabe o email dela.
+  const nivel = (page: Tab): NivelAcesso => userEmail ? getNivelAcesso(page, userEmail) : "editar";
 
   // Re-apply theme globals on every dark change
   const T = THEMES[dark ? "dark" : "light"];
@@ -2684,15 +2744,6 @@ export default function App() {
       listProjetosFromSP().then(data => { if (data.length > 0) setProjetos(data); }).catch(() => {});
     }).catch(() => {});
   }, []);
-
-  const tabs: { key: Tab; label: string }[] = [
-    { key: "dashboard", label: "📊 Dashboard" }, { key: "contas", label: "📋 Contas a Receber" },
-    { key: "impostos", label: "⚙️ Impostos" },
-    { key: "clientes", label: "👥 Clientes / Prazos" },
-    { key: "projetos", label: "🏗 Projetos (WO)" },
-    { key: "drafts", label: "📝 Drafts" },
-    { key: "feriados", label: "📅 Feriados" },
-  ];
 
   return (
     <div style={S.app}>
@@ -2733,9 +2784,9 @@ export default function App() {
 
         {/* Nav principal (flex:1, overflow auto interno) */}
         <div style={{ ...S.nav, flex: 1, margin: 0, justifyContent: "flex-start" }}>
-          <button style={navBtn(tab === "contas")} onClick={() => changeTab("contas")}>📋 Contas a Receber</button>
-          <button style={navBtn(tab === "producao")} onClick={() => changeTab("producao")}>🏭 Production Projects</button>
-          <button style={navBtn(tab === "dashboard")} onClick={() => changeTab("dashboard")}>📊 Dashboard</button>
+          {nivel("contas") !== "nenhum" && <button style={navBtn(tab === "contas")} onClick={() => changeTab("contas")}>📋 Contas a Receber</button>}
+          {nivel("producao") !== "nenhum" && <button style={navBtn(tab === "producao")} onClick={() => changeTab("producao")}>🏭 Production Projects</button>}
+          {nivel("dashboard") !== "nenhum" && <button style={navBtn(tab === "dashboard")} onClick={() => changeTab("dashboard")}>📊 Dashboard</button>}
 
           {tab === "dashboard" && (
             <>
@@ -2789,7 +2840,8 @@ export default function App() {
                 { key: "drafts"             as Tab, icon: "📝",  label: "Drafts" },
                 { key: "feriados"           as Tab, icon: "📅",  label: "Feriados" },
                 { key: "qualtech_projects"  as Tab, icon: "🌐",  label: "Qualtech · Projects" },
-              ].map((item, i, arr) => (
+                ...(isAdmin ? [{ key: "permissionamento" as Tab, icon: "🔐", label: "Permissionamento" }] : []),
+              ].filter(item => item.key === "permissionamento" || nivel(item.key) !== "nenhum").map((item, i, arr) => (
                 <button key={item.key}
                   onClick={() => { changeTab(item.key); setSettingsOpen(false); }}
                   style={{
@@ -2813,8 +2865,8 @@ export default function App() {
       </div>
 
       {tab === "dashboard" && <Dashboard dark={dark} onToggleDark={toggleDark} page={dashPage} onPageChange={setDashPage} />}
-      {tab === "contas" && <ContasPage drafts={drafts} projetos={projetos} impostos={impostos} onDraftsChanged={reloadDrafts} spAccount={spAccount} />}
-      {tab === "producao" && <ProducaoPage />}
+      {tab === "contas" && <ContasPage drafts={drafts} projetos={projetos} impostos={impostos} onDraftsChanged={reloadDrafts} spAccount={spAccount} readOnly={nivel("contas") !== "editar"} />}
+      {tab === "producao" && <ProducaoPage readOnly={nivel("producao") !== "editar"} />}
 
       {tab === "impostos" && <CRUDPage<Imposto> title="Impostos" icon="🧾" endpoint="impostos" staticData={STATIC_IMPOSTOS}
         readOnly
@@ -2843,6 +2895,7 @@ export default function App() {
         </>)} />}
 
       {tab === "projetos" && <CRUDPage<Projeto> title="Projetos / WO" icon="🏗" endpoint="projetos"
+        readOnly={nivel("projetos") !== "editar"}
         staticData={STATIC_PROJETOS_RAW as Projeto[]}
         spLoad={listProjetosFromSP}
         spSave={async (f) => { if (f.id) await updateProjeto(f.id, f); else await createProjeto(f); }}
@@ -2914,6 +2967,69 @@ export default function App() {
           <Field label="Estado (UF)"><input style={S.input} maxLength={2} value={f.estado || ""} onChange={e => set("estado", e.target.value.toUpperCase())} /></Field>
           <Field label="Município"><input style={S.input} value={f.municipio || ""} onChange={e => set("municipio", e.target.value)} /></Field>
         </>)} />}
+
+      {tab === "permissionamento" && isAdmin && <PermissionamentoPage />}
+    </div>
+  );
+}
+
+// ===== PERMISSIONAMENTO (só visível para ADMIN_EMAIL) =====
+function PermissionamentoPage() {
+  const niveisCor: Record<NivelAcesso, string> = { nenhum: "#dc2626", ver: "#f59e0b", editar: "#059669" };
+  const niveisLabel: Record<NivelAcesso, string> = { nenhum: "Sem acesso", ver: "Só visualiza", editar: "Acesso completo" };
+  return (
+    <div style={S.page}>
+      <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 10, padding: "10px 16px", marginBottom: 14, fontSize: 12, color: "#1e40af", lineHeight: 1.6 }}>
+        📋 <strong>Fixo no código</strong> (para alterar, peça a mudança e o deploy) — esta tela é só consulta.<br />
+        ⚠️ <strong>Importante:</strong> isso controla o que aparece na tela (organização por setor), <strong>não substitui</strong> a permissão real dos dados no SharePoint. Quem tem acesso de leitura numa lista do SharePoint consegue vê-la por fora do app (link direto, Excel) mesmo que essa tela esconda a aba. Para dado sensível, restrinja também a permissão da lista no SharePoint.
+      </div>
+
+      <div style={S.card}>
+        <div style={S.cardHeader}><span style={S.cardTitle}>👤 Setor por Email</span></div>
+        <div style={{ overflowX: "auto" }}>
+          <table style={S.table}>
+            <thead><tr><th style={S.th}>Email</th><th style={S.th}>Setor</th></tr></thead>
+            <tbody>
+              {Object.entries(SETOR_POR_EMAIL).map(([email, setor]) => (
+                <tr key={email}>
+                  <td style={S.td}>{email}{email === ADMIN_EMAIL && <Badge text="Admin" color="#7c3aed" />}</td>
+                  <td style={S.td}>{setor}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div style={{ ...S.card, marginTop: 16 }}>
+        <div style={S.cardHeader}><span style={S.cardTitle}>🔐 Nível de Acesso por Página</span></div>
+        <div style={{ overflowX: "auto" }}>
+          <table style={S.table}>
+            <thead><tr><th style={S.th}>Página</th><th style={S.th}>Padrão</th><th style={S.th}>Exceções por Setor</th><th style={S.th}>Exceções por Email</th></tr></thead>
+            <tbody>
+              {PAGINAS_INFO.map(p => {
+                const cfg = ACESSO_PAGINAS[p.key];
+                return (
+                  <tr key={p.key}>
+                    <td style={S.td}>{p.label}</td>
+                    <td style={S.td}><Badge text={niveisLabel[cfg.padrao]} color={niveisCor[cfg.padrao]} /></td>
+                    <td style={S.td}>
+                      {cfg.porSetor ? Object.entries(cfg.porSetor).map(([setor, nv]) => (
+                        <div key={setor} style={{ marginBottom: 2 }}>{setor}: <Badge text={niveisLabel[nv]} color={niveisCor[nv]} /></div>
+                      )) : "—"}
+                    </td>
+                    <td style={S.td}>
+                      {cfg.porEmail ? Object.entries(cfg.porEmail).map(([email, nv]) => (
+                        <div key={email} style={{ marginBottom: 2 }}>{email}: <Badge text={niveisLabel[nv]} color={niveisCor[nv]} /></div>
+                      )) : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
