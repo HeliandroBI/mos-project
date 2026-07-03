@@ -9,7 +9,7 @@ import STATIC_QUALTECH_PROJECTS from "./staticQualtechProjects.json";
 
 
 type Tab = "contas" | "dashboard" | "impostos" | "clientes" | "projetos" | "drafts" | "feriados"
-         | "qualtech_projects" | "producao" | "permissionamento";
+         | "producao" | "permissionamento";
 
 // ===== PERMISSIONAMENTO POR PÁGINA (fixo no código — para alterar, peça a mudança e o deploy) =====
 type NivelAcesso = "nenhum" | "ver" | "editar";
@@ -31,7 +31,6 @@ const PAGINAS_INFO: { key: Tab; label: string }[] = [
   { key: "projetos", label: "🏗 Projetos (WO)" },
   { key: "drafts", label: "📝 Drafts" },
   { key: "feriados", label: "📅 Feriados" },
-  { key: "qualtech_projects", label: "🌐 Qualtech · Projects" },
 ];
 
 // Nível de acesso por página: "padrao" vale pra quem não tem regra específica de setor/email.
@@ -45,7 +44,6 @@ const ACESSO_PAGINAS: Record<Tab, { padrao: NivelAcesso; porSetor?: Record<strin
   projetos: { padrao: "editar" },
   drafts: { padrao: "ver" },
   feriados: { padrao: "ver" },
-  qualtech_projects: { padrao: "editar" },
   permissionamento: { padrao: "nenhum" }, // só o ADMIN_EMAIL vê essa aba, tratado à parte
 };
 
@@ -467,7 +465,8 @@ const FERIADOS_SET = new Set(STATIC_FERIADOS.map(f => f.data));
 
 function parseDataInput(s?: string): Date | undefined {
   if (!s) return undefined;
-  return new Date(s + "T12:00:00");
+  const d = new Date(s + "T12:00:00");
+  return isNaN(d.getTime()) ? undefined : d;
 }
 function addDias(d: Date, n: number): Date {
   const r = new Date(d); r.setDate(r.getDate() + n); return r;
@@ -488,9 +487,9 @@ function calcPrazos(f: ContaReceber): Partial<ContaReceber> {
   const out: Partial<ContaReceber> = {};
 
   // Prev.Pag = dia-limite de pagamento do cliente no mês do Vencimento (ou no seguinte, se já passou), próximo dia útil
-  if (f.vencimento) {
+  const venc = parseDataInput(f.vencimento);
+  if (venc) {
     const dl = prazo ? prazo.data_limite : 30;
-    const venc = parseDataInput(f.vencimento)!;
     let prev = new Date(venc.getFullYear(), venc.getMonth(), Math.min(dl, 28), 12);
     if (prev < venc) {
       const m = (venc.getMonth() + 1) % 12;
@@ -501,8 +500,8 @@ function calcPrazos(f: ContaReceber): Partial<ContaReceber> {
   }
 
   // Prev.Fat = Data Fim + prazo "Rec. Doc" do cliente (dias corridos), no próximo dia útil
-  if (f.data_fim && prazo) {
-    const df = parseDataInput(f.data_fim)!;
+  const df = f.data_fim ? parseDataInput(f.data_fim) : undefined;
+  if (df && prazo) {
     out.prev_fat = toISODate(proximoDiaUtil(addDias(df, prazo.rec_doc)));
   }
 
@@ -517,12 +516,12 @@ function DateBR({ value, onChange, placeholder = "dd/mm/aaaa", style }: {
   value?: string; onChange: (v?: string) => void; placeholder?: string; style?: React.CSSProperties;
 }) {
   const [open, setOpen] = useState(false);
-  const [viewY, setViewY] = useState(() => (value ? parseDataInput(value)! : new Date()).getFullYear());
-  const [viewM, setViewM] = useState(() => (value ? parseDataInput(value)! : new Date()).getMonth());
+  const [viewY, setViewY] = useState(() => (parseDataInput(value) || new Date()).getFullYear());
+  const [viewM, setViewM] = useState(() => (parseDataInput(value) || new Date()).getMonth());
 
   useEffect(() => {
     if (!open) return;
-    const d = value ? parseDataInput(value)! : new Date();
+    const d = parseDataInput(value) || new Date();
     setViewY(d.getFullYear()); setViewM(d.getMonth());
     const close = () => setOpen(false);
     document.addEventListener("mousedown", close);
@@ -586,7 +585,7 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraft
 
   useEffect(() => {
     if (spAccount) {
-      getListItems('ListaWOs')
+      getListItems('ListaWOs', { cache: true })
         .then(items => setSpWOs(items))
         .catch(err => console.error('Erro ao buscar ListaWOs:', err));
     }
@@ -758,15 +757,32 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraft
             <Field label="Cliente"><input style={S.input} value={form.cliente || ""} onChange={e => handleChange("cliente", e.target.value)} /></Field>
             <Field label="Plataforma"><input style={S.input} value={form.plataforma || ""} onChange={e => handleChange("plataforma", e.target.value)} /></Field>
             <Field label="Coord. Focal"><input style={S.input} value={form.coord_focal || ""} onChange={e => handleChange("coord_focal", e.target.value)} /></Field>
-
-            <Section title="Documento / Draft" />
             <Field label="Draft">
-              <select style={S.select} value={form.draft_id ?? 0} onChange={e => handleChange("draft_id", +e.target.value)}>
-                <option value={0}>▶ Nova Draft #{proximoCodigo} (criar ao salvar)</option>
-                {drafts.map(d => <option key={d.id} value={d.id}>#{d.codigo}{d.data_draft ? ` — ${fmt.date(d.data_draft)}` : ""}</option>)}
-              </select>
+              {form.id
+                ? <select style={S.select} value={form.draft_id ?? 0} onChange={e => handleChange("draft_id", +e.target.value)}>
+                    <option value={0}>▶ Nova Draft #{proximoCodigo} (criar ao salvar)</option>
+                    {drafts.map(d => <option key={d.id} value={d.id}>#{d.codigo}{d.data_draft ? ` — ${fmt.date(d.data_draft)}` : ""}</option>)}
+                  </select>
+                : <input style={S.input} value={`▶ Nova Draft #${proximoCodigo} (criar ao salvar)`} disabled />}
             </Field>
             <Field label="Data Draft"><DateBR value={form.data_draft} onChange={v => handleChange("data_draft", v || "")} /></Field>
+            <Field label="Escopo">
+              <select style={S.select} value={form.escopo || ""} onChange={e => handleChange("escopo", e.target.value)}>
+                <option value="">—</option>
+                {["SERVIÇO", "LOCAÇÃO", "VENDA", "CRÉDITO"].map(d => <option key={d}>{d}</option>)}
+              </select>
+            </Field>
+            <Field label="PO/Contrato"><input style={S.input} value={form.po_contrato || ""} onChange={e => handleChange("po_contrato", e.target.value)} /></Field>
+            <Field label="Data Início"><DateBR value={form.data_inicio} onChange={v => handleChange("data_inicio", v || "")} /></Field>
+            <Field label="Data Fim"><DateBR value={form.data_fim} onChange={v => handleChange("data_fim", v || "")} /></Field>
+            <Field label="Status">
+              <select style={S.select} value={form.status || ""} onChange={e => handleChange("status", e.target.value)}>
+                <option value="">—</option>
+                {["Programado","Em andamento","Aguardando Pagamento","Aguardando Resposta do Cliente","Aguardando Documentação","Aguardando PO","Enviar NF","PAGO","Previsão","Free Of Charge"].map(s => <option key={s}>{s}</option>)}
+              </select>
+            </Field>
+
+            <Section title="Documento" />
             <Field label="Doc">
               <select style={S.select} value={form.doc || ""} onChange={e => handleChange("doc", e.target.value)}>
                 <option value="">—</option>
@@ -775,12 +791,6 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraft
             </Field>
             <Field label="Nº Doc"><input style={S.input} value={form.num_doc || ""} onChange={e => handleChange("num_doc", e.target.value)} /></Field>
             <Field label="Data Doc"><DateBR value={form.data_doc} onChange={v => handleChange("data_doc", v || "")} /></Field>
-            <Field label="Escopo">
-              <select style={S.select} value={form.escopo || ""} onChange={e => handleChange("escopo", e.target.value)}>
-                <option value="">—</option>
-                {["SERVIÇO", "LOCAÇÃO", "VENDA", "CRÉDITO"].map(d => <option key={d}>{d}</option>)}
-              </select>
-            </Field>
             <Field label="Faturado por">
               <select style={S.select} value={form.faturado_por || ""} onChange={e => handleChange("faturado_por", e.target.value)}>
                 <option value="">—</option>
@@ -794,9 +804,6 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraft
                 <option value="CONTRATO S/ INSS">CONTRATO S/ INSS</option>
               </select>
             </Field>
-            <Field label="PO/Contrato"><input style={S.input} value={form.po_contrato || ""} onChange={e => handleChange("po_contrato", e.target.value)} /></Field>
-            <Field label="Data Início"><DateBR value={form.data_inicio} onChange={v => handleChange("data_inicio", v || "")} /></Field>
-            <Field label="Data Fim"><DateBR value={form.data_fim} onChange={v => handleChange("data_fim", v || "")} /></Field>
 
             <Section title="Valores e Impostos" />
             <div style={{ gridColumn: "1/-1" }}>
@@ -878,7 +885,7 @@ function toSpConta(fields: Record<string, any>): Record<string, any> {
     id, draft_id, _novaDraft, wo,
     ID, Id, FileSystemObjectType, ServerRedirectedEmbedUri, ServerRedirectedEmbedUrl,
     ContentTypeId, OData__ColorTag, ComplianceAssetId, Modified, Created, AuthorId,
-    EditorId, OData__UIVersionString, Attachments, GUID, Title,
+    EditorId, OData__UIVersionString, Attachments, GUID, Title, __metadata,
     ...rest
   } = fields;
   return wo != null ? { ...rest, Title: String(wo) } : rest;
@@ -957,7 +964,7 @@ function ContasPage({ drafts, projetos, impostos, onDraftsChanged, spAccount, re
     if (!getSpAccount()) return;
     setLoading(true);
     try {
-      const data: ContaReceber[] = await getListItems('fContasReceber');
+      const data: ContaReceber[] = await getListItems('fContasReceber', { cache: true });
       allDataRef.current = data;
       applyFilters(data, filters, sort);
     } catch (e: any) { console.error(e); setLoadError(String(e?.message || e)); }
@@ -1029,16 +1036,6 @@ function ContasPage({ drafts, projetos, impostos, onDraftsChanged, spAccount, re
             {!readOnly && <button style={btn("#0891b2")} title="Recalcula VL.Bruto, impostos, Vencimento, Prev.Fat e Prev.Pag de todos os registros" onClick={() => {
               alert("Recálculo disponível apenas com backend ativo.");
             }}>⟳ Recalcular Tudo</button>}
-            <button style={btn("#6366f1")} onClick={async () => {
-              try {
-                const token = await getToken();
-                const r = await fetch(`https://qualitechirmcom.sharepoint.com/sites/GLOBALAPPS/_api/web/lists/getbytitle('fContasReceber')/fields?$filter=Hidden eq false and ReadOnlyField eq false`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json;odata=verbose' } });
-                const json = await r.json();
-                const fields = (json.d.results || []).map((f: any) => `${f.InternalName} (${f.TypeAsString})`);
-                console.log('[SP fContasReceber] campos:', fields);
-                alert('Campos fContasReceber:\n\n' + fields.join('\n'));
-              } catch(e: any) { alert('Erro: ' + e.message); }
-            }}>🔍 Ver campos SP</button>
             {!readOnly && <label style={{ ...btn("#f59e0b"), cursor: "pointer" }}>📤 Importar CSV<input type="file" accept=".csv" style={{ display: "none" }} onChange={uploadCSV} /></label>}
           </div>
         </div>
@@ -1218,176 +1215,6 @@ function exportCSV(filename: string, columns: { key: string; label: string }[], 
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
-}
-
-// ===== QUALTECH · PROJECTS (CRUD via Azure Function proxy) =====
-const QT_API = "/api/qualtech-projects";
-
-interface QtProject {
-  id?: number;
-  project_number?: number;
-  cliente?: string;
-  plataforma?: string;
-  classificacao?: string;
-  categoria_contrato?: string;
-  client_id?: number;
-  platform_id?: number;
-  project_classification_id?: number;
-  contract_category_id?: number;
-}
-
-const EMPTY_QT: QtProject = { project_number: 0, client_id: undefined, platform_id: undefined, project_classification_id: undefined, contract_category_id: undefined };
-
-function QualtechProjectsPage() {
-  const [rows, setRows] = useState<QtProject[]>(STATIC_QUALTECH_PROJECTS as QtProject[]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [editing, setEditing] = useState<QtProject | null>(null);
-  const [delTarget, setDelTarget] = useState<QtProject | null>(null);
-  const [liveMode, setLiveMode] = useState(false);
-
-  const load = () => {
-    setLoading(true); setError(null);
-    fetch(QT_API)
-      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
-      .then(data => { setRows(Array.isArray(data) ? data : []); setLiveMode(true); })
-      .catch(err => { setError(String(err)); setRows(STATIC_QUALTECH_PROJECTS as QtProject[]); })
-      .finally(() => setLoading(false));
-  };
-
-  const save = async (form: QtProject) => {
-    if (!liveMode) { alert("Conecte à API ao vivo primeiro (botão 🔄 API ao vivo)"); return; }
-    try {
-      const isNew = !form.id;
-      const r = await fetch(isNew ? QT_API : `${QT_API}?id=${form.project_number}`, {
-        method: isNew ? "POST" : "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ project_number: form.project_number, client_id: form.client_id, platform_id: form.platform_id, project_classification_id: form.project_classification_id, contract_category_id: form.contract_category_id }),
-      });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      setEditing(null);
-      load();
-    } catch (err) { alert("Erro ao salvar: " + String(err)); }
-  };
-
-  const del = async () => {
-    if (!delTarget || !liveMode) return;
-    try {
-      const r = await fetch(`${QT_API}?id=${delTarget.project_number}`, { method: "DELETE" });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      setDelTarget(null);
-      load();
-    } catch (err) { alert("Erro ao excluir: " + String(err)); }
-  };
-
-  const filtered = useMemo(() => {
-    if (!search.trim()) return rows;
-    const s = search.trim().toLowerCase();
-    return rows.filter(r =>
-      String(r.project_number ?? "").includes(s) ||
-      (r.cliente ?? "").toLowerCase().includes(s) ||
-      (r.plataforma ?? "").toLowerCase().includes(s) ||
-      (r.classificacao ?? "").toLowerCase().includes(s) ||
-      (r.categoria_contrato ?? "").toLowerCase().includes(s)
-    );
-  }, [rows, search]);
-
-  return (
-    <div style={S.card}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
-        <span style={S.cardTitle}>
-          🌐 Qualtech · Projects
-          <span style={{ fontSize: 11, fontWeight: 400, marginLeft: 8, color: liveMode ? "#16a34a" : N.muted }}>
-            {liveMode ? "● API ao vivo" : "● dados locais"} ({filtered.length})
-          </span>
-        </span>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <input style={{ ...S.input, width: 180 }} placeholder="Filtrar projeto, cliente..." value={search} onChange={e => setSearch(e.target.value)} />
-          <button style={btn()} onClick={load} disabled={loading}>{loading ? "⏳" : "🔄"} API ao vivo</button>
-          <button style={btn("#2563eb")} onClick={() => setEditing({ ...EMPTY_QT })}>+ Novo</button>
-        </div>
-      </div>
-
-      {error && <div style={{ color: "#dc2626", fontSize: 12, marginBottom: 8 }}>⚠ {error} — exibindo dados locais</div>}
-
-      <div style={{ overflowX: "auto" }}>
-        <table style={S.table}>
-          <thead>
-            <tr>
-              <th style={S.th}>WO</th>
-              <th style={S.th}>Cliente</th>
-              <th style={S.th}>Plataforma</th>
-              <th style={S.th}>Classificação</th>
-              <th style={S.th}>Categoria Contrato</th>
-              <th style={{ ...S.th, width: 80 }}>Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((r, i) => (
-              <tr key={r.id ?? i} style={{ background: i % 2 === 0 ? "transparent" : N.bg }}>
-                <td style={{ ...S.td, fontWeight: 700 }}>{r.project_number}</td>
-                <td style={S.td}>{r.cliente || "—"}</td>
-                <td style={S.td}>{r.plataforma || "—"}</td>
-                <td style={S.td}>{r.classificacao || "—"}</td>
-                <td style={S.td}>{r.categoria_contrato || "—"}</td>
-                <td style={{ ...S.td, whiteSpace: "nowrap" }}>
-                  <button style={btnSm()} onClick={() => setEditing({ ...r })} title="Editar">✏️</button>
-                  <button style={btnSm("#dc2626")} onClick={() => setDelTarget(r)} title="Excluir">🗑</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Modal edição */}
-      {editing !== null && (
-        <div style={S.modal}>
-          <div style={{ ...S.modalBox, width: 420, padding: 24 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <span style={{ fontWeight: 700, fontSize: 15 }}>{editing.id ? `Editar WO ${editing.project_number}` : "Novo Projeto"}</span>
-              <button style={btnSm()} onClick={() => setEditing(null)}>✕</button>
-            </div>
-            <Field label="Project Number (WO)">
-              <input type="number" style={S.input} value={editing.project_number || ""} onChange={e => setEditing({ ...editing, project_number: +e.target.value })} disabled={!!editing.id} />
-            </Field>
-            <Field label="Client ID">
-              <input type="number" style={S.input} value={editing.client_id || ""} onChange={e => setEditing({ ...editing, client_id: +e.target.value })} />
-            </Field>
-            <Field label="Platform ID">
-              <input type="number" style={S.input} value={editing.platform_id || ""} onChange={e => setEditing({ ...editing, platform_id: +e.target.value })} />
-            </Field>
-            <Field label="Classification ID">
-              <input type="number" style={S.input} value={editing.project_classification_id || ""} onChange={e => setEditing({ ...editing, project_classification_id: +e.target.value })} />
-            </Field>
-            <Field label="Contract Category ID">
-              <input type="number" style={S.input} value={editing.contract_category_id || ""} onChange={e => setEditing({ ...editing, contract_category_id: +e.target.value })} />
-            </Field>
-            {!liveMode && <div style={{ color: "#f59e0b", fontSize: 12, marginBottom: 8 }}>⚠ Modo local: clique "🔄 API ao vivo" para persistir alterações na API.</div>}
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
-              <button style={btn(N.muted)} onClick={() => setEditing(null)}>Cancelar</button>
-              <button style={btn("#2563eb")} onClick={() => save(editing)}>Salvar</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Confirm delete */}
-      {delTarget && (
-        <div style={S.modal}>
-          <div style={{ ...S.modalBox, width: 360, padding: 24 }}>
-            <p style={{ marginBottom: 16 }}>Excluir projeto <strong>WO {delTarget.project_number}</strong> — {delTarget.cliente}?</p>
-            {!liveMode && <div style={{ color: "#f59e0b", fontSize: 12, marginBottom: 8 }}>⚠ Modo local: a exclusão não será enviada à API.</div>}
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button style={btn(N.muted)} onClick={() => setDelTarget(null)}>Cancelar</button>
-              <button style={btn("#dc2626")} onClick={del}>Excluir</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
 }
 
 // ===== GENERIC CRUD =====
@@ -2838,7 +2665,7 @@ export default function App() {
         {/* ⚙️ fora do nav — dropdown abre livremente para baixo/esquerda */}
         <div style={{ position: "relative", flexShrink: 0 }} onMouseDown={e => e.stopPropagation()}>
           <button
-            style={{ ...navBtn(["impostos","clientes","projetos","drafts","feriados","qualtech_projects"].includes(tab)),
+            style={{ ...navBtn(["impostos","clientes","projetos","drafts","feriados"].includes(tab)),
               padding: "8px 14px", background: N.card,
               boxShadow: `4px 4px 10px ${N.shadowD}, -2px -2px 6px ${N.shadowL}`,
               borderRadius: 10, display: "flex", alignItems: "center", gap: 6 }}
@@ -2866,7 +2693,6 @@ export default function App() {
                 { key: "projetos"           as Tab, icon: "🏗",  label: "Projetos (WO)" },
                 { key: "drafts"             as Tab, icon: "📝",  label: "Drafts" },
                 { key: "feriados"           as Tab, icon: "📅",  label: "Feriados" },
-                { key: "qualtech_projects"  as Tab, icon: "🌐",  label: "Qualtech · Projects" },
                 ...(isAdmin ? [{ key: "permissionamento" as Tab, icon: "🔐", label: "Permissionamento" }] : []),
               ].filter(item => item.key === "permissionamento" || nivel(item.key) !== "nenhum").map((item, i, arr) => (
                 <button key={item.key}
@@ -2996,7 +2822,6 @@ export default function App() {
         }} />}
 
       {tab === "drafts" && <DraftsPage onDraftsChanged={reloadDrafts} />}
-      {tab === "qualtech_projects" && <QualtechProjectsPage />}
 
       {tab === "feriados" && <CRUDPage<Feriado> title="Feriados" icon="📅" endpoint="feriados" staticData={STATIC_FERIADOS}
         readOnly

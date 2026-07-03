@@ -73,8 +73,15 @@ export async function getToken(): Promise<string> {
   }
 }
 
-export async function getListItems(listName: string): Promise<any[]> {
+// Cache em memória por lista — evita refazer a mesma busca pesada ($select=*&$top=5000)
+// toda vez que um formulário/modal reabre na mesma sessão. Só usado quando opts.cache=true;
+// invalidado automaticamente por clearCache() após create/update/delete na lista.
+const _listCache = new Map<string, any[]>();
+
+export async function getListItems(listName: string, opts?: { cache?: boolean }): Promise<any[]> {
   await initMsal(); // garante que MSAL está inicializado antes de qualquer operação
+
+  if (opts?.cache && _listCache.has(listName)) return _listCache.get(listName)!;
 
   let account = getSpAccount();
   if (!account) {
@@ -91,7 +98,7 @@ export async function getListItems(listName: string): Promise<any[]> {
   const result = await response.json();
   const items = result.d.results || [];
   if (items.length > 0) console.log('[SP] data_doc raw:', items[0].data_doc, '| vencimento raw:', items[0].vencimento);
-  return items.map((item: any) => {
+  const mapped = items.map((item: any) => {
     const out: any = { ...item, id: item.ID };
     // SP usa Title como primeiro campo — mapeia para wo se wo estiver vazio
     if (!out.wo && item.Title) out.wo = item.Title;
@@ -110,9 +117,12 @@ export async function getListItems(listName: string): Promise<any[]> {
     }
     return out;
   });
+  if (opts?.cache) _listCache.set(listName, mapped);
+  return mapped;
 }
 
 function clearCache(listName: string) {
+  _listCache.delete(listName);
   sessionStorage.removeItem(`sp-list-${listName}`);
 }
 
@@ -572,7 +582,10 @@ function producaoToSp(p: ProducaoItem): Record<string, any> {
   return Object.fromEntries(Object.entries(payload).filter(([, v]) => v !== undefined));
 }
 
+let _producaoCache: ProducaoItem[] | null = null;
+
 export async function listProducaoFromSP(): Promise<ProducaoItem[]> {
+  if (_producaoCache) return _producaoCache;
   const token = await getToken();
   let all: any[] = [];
   let url: string | null = `${SITE}/_api/web/lists/getbytitle('${PRODUCAO_LIST}')/items?$top=2000&$orderby=Year_Producao desc,Month_Producao desc,WO_Producao asc`;
@@ -583,7 +596,8 @@ export async function listProducaoFromSP(): Promise<ProducaoItem[]> {
     all = all.concat(json.value || []);
     url = json['odata.nextLink'] || null;
   }
-  return all.map(mapSpToProducao);
+  _producaoCache = all.map(mapSpToProducao);
+  return _producaoCache;
 }
 
 export async function createProducao(p: ProducaoItem): Promise<void> {
@@ -595,6 +609,7 @@ export async function createProducao(p: ProducaoItem): Promise<void> {
     body: JSON.stringify(producaoToSp(p)),
   });
   if (!r.ok) throw new Error(`SP createProducao: ${r.status} — ${(await r.text()).slice(0, 200)}`);
+  _producaoCache = null;
 }
 
 export async function updateProducao(id: number, p: ProducaoItem): Promise<void> {
@@ -606,6 +621,7 @@ export async function updateProducao(id: number, p: ProducaoItem): Promise<void>
     body: JSON.stringify(producaoToSp(p)),
   });
   if (!r.ok) throw new Error(`SP updateProducao: ${r.status} — ${(await r.text()).slice(0, 200)}`);
+  _producaoCache = null;
 }
 
 export async function deleteProducao(id: number): Promise<void> {
@@ -616,6 +632,7 @@ export async function deleteProducao(id: number): Promise<void> {
     headers: { Authorization: `Bearer ${token}`, 'X-RequestDigest': digest, 'X-HTTP-Method': 'DELETE', 'If-Match': '*' },
   });
   if (!r.ok) throw new Error(`SP deleteProducao: ${r.status} — ${(await r.text()).slice(0, 200)}`);
+  _producaoCache = null;
 }
 
 // Roda tarefas com concorrência limitada — evita disparar centenas de requisições de uma vez
@@ -658,6 +675,7 @@ export async function deleteAllProducao(onProgress?: (done: number, total: numbe
     });
     if (!r.ok) throw new Error(`SP deleteAllProducao: ${r.status} — ${(await r.text()).slice(0, 200)}`);
   }, onProgress);
+  _producaoCache = null;
   return ids.length;
 }
 
@@ -675,6 +693,7 @@ export async function bulkCreateProducao(items: ProducaoItem[], onProgress?: (do
     if (!r.ok) errors.push(`WO ${p.WO_Producao} ${p.Month_Producao}/${p.Year_Producao}: ${r.status} ${(await r.text()).slice(0, 150)}`);
     else ok++;
   }, onProgress);
+  _producaoCache = null;
   return { ok, errors };
 }
 
@@ -688,7 +707,7 @@ export async function createConta(data: Record<string, any>): Promise<any> {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json;odata=nometadata',
+      'Content-Type': 'application/json',
       Accept: 'application/json;odata=nometadata',
       'X-RequestDigest': digest,
     },
@@ -709,7 +728,7 @@ export async function updateConta(id: number, data: Record<string, any>): Promis
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json;odata=nometadata',
+      'Content-Type': 'application/json',
       Accept: 'application/json;odata=nometadata',
       'X-RequestDigest': digest,
       'X-HTTP-Method': 'MERGE',
