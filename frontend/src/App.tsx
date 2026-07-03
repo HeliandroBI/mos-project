@@ -1,6 +1,7 @@
 import Dashboard from "./Dashboard";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { initMsal, getSpAccount, loginSharePoint, logoutSharePoint, postWOToSharePoint, getListItems, getToken, listWOs, createWO, updateWO, deleteWO, getListFields, listProjects, createProject, updateProject, deleteProject, createConta, updateConta, deleteConta, listProjetosFromSP, createProjeto, updateProjeto, deleteProjeto, listProducaoFromSP, createProducao, updateProducao, deleteProducao, ID_COUNTRY_BR, type WOItem, type ProjectItem, type ProducaoItem } from "./services/sharepoint";
+import { initMsal, getSpAccount, loginSharePoint, logoutSharePoint, postWOToSharePoint, getListItems, getToken, listWOs, createWO, updateWO, deleteWO, getListFields, listProjects, createProject, updateProject, deleteProject, createConta, updateConta, deleteConta, listProjetosFromSP, createProjeto, updateProjeto, deleteProjeto, listProducaoFromSP, createProducao, updateProducao, deleteProducao, deleteAllProducao, bulkCreateProducao, ID_COUNTRY_BR, type WOItem, type ProjectItem, type ProducaoItem } from "./services/sharepoint";
+import * as XLSX from "xlsx";
 
 import { STATIC_DRAFTS, STATIC_CLIENTES_PRAZOS } from "./staticData";
 import STATIC_PROJETOS_RAW from "./staticProjetos.json";
@@ -2104,6 +2105,134 @@ function ProducaoPage() {
     catch (e: any) { alert(`Erro: ${e.message}`); }
   };
 
+  // ── Importar planilha (aba "Input") — substitui TODOS os registros da lista ──
+  const [importPreview, setImportPreview] = useState<ProducaoItem[] | null>(null);
+  const [importFileName, setImportFileName] = useState("");
+  const [importRunning, setImportRunning] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ fase: string; done: number; total: number } | null>(null);
+  const [importResult, setImportResult] = useState<{ apagados: number; criados: number; erros: string[] } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const parseImportFile = async (file: File) => {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: "array", cellDates: true });
+    const sheetName = wb.SheetNames.find(n => n.toLowerCase() === "input") || wb.SheetNames[0];
+    const ws = wb.Sheets[sheetName];
+    const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
+    const [, ...dataRows] = rows; // pula cabeçalho
+    const toISO = (d: any): string | undefined => {
+      if (!d) return undefined;
+      if (d instanceof Date) return toISODate(d);
+      return undefined;
+    };
+    const toStr = (v: any): string | undefined => (v == null || v === "" ? undefined : String(v));
+    const toNum = (v: any): number | undefined => (v == null || v === "" ? undefined : Number(v));
+
+    const parsed: ProducaoItem[] = dataRows
+      .filter(r => r[3] != null) // precisa ter WO
+      .map(r => {
+        const mesData: Date | null = r[0] instanceof Date ? r[0] : null;
+        return {
+          ID_Country: 10, // Brasil — confirmado que essa planilha é toda Brasil
+          Month_Producao: mesData ? mesData.getMonth() + 1 : undefined,
+          Year_Producao: mesData ? mesData.getFullYear() : undefined,
+          E_Or_F: toStr(r[1]),
+          WO_Producao: toNum(r[3]),
+          Contract_Category_Producao: toStr(r[4]),
+          Nome_Cliente_Producao: toStr(r[5]),
+          Rig_Producao: toStr(r[6]),
+          Quote_Producao: toStr(r[7]),
+          Start_Date_Producao: toISO(r[8]),
+          End_Date_Producao: toISO(r[9]),
+          Amount_Charget_Producao: toNum(r[10]),
+          Value_Producao: toNum(r[11]),
+          Pending_Producao: toNum(r[12]),
+          DI_Producao: toStr(r[13]),
+          DI_Date_Producao: toISO(r[14]),
+          Number_Of_Invoice_Producao: toStr(r[15]),
+          Invoice_Total_Value_Producao: toNum(r[16]),
+          Invoice_Date_Producao: toISO(r[17]),
+          Days_NF_Des_Producao: toNum(r[18]),
+          Rental_Equipment_Invoice_REI_Pro: toStr(r[19]),
+          Rental_Equipment_Invoice_Value_P: toNum(r[20]),
+          REI_Date_Producao: toISO(r[21]),
+          Days_FL_Des_Producao: toNum(r[22]),
+          WIP_Producao: toNum(r[23]),
+          Daily_Producao: toNum(r[24]),
+          Day_Stand_By_Producao: toNum(r[25]),
+          Total_Daily_Producao: toNum(r[26]),
+          Personal_Producao: toNum(r[27]),
+          Stand_By_Producao: toNum(r[28]),
+          Personel_Logistics_Producao: toNum(r[29]),
+          Hotel_Meal_Producao: toNum(r[30]),
+          Equipment_In_Transit_Producao: toNum(r[31]),
+          Material_Producao: toNum(r[32]),
+          Log_De_Materiais_Producao: toNum(r[33]),
+          Exchange_Rate_Variation_Producao: toNum(r[34]),
+          LOP_Producao: toNum(r[35]),
+          Tags_Slings_Producao: toNum(r[36]),
+          Extra_Time_Producao: toNum(r[37]),
+          Others_Producao: toNum(r[38]),
+          ART_Technical_Responsibility_Pro: toNum(r[39]),
+          Engineering_Producao: toNum(r[40]),
+          Total_Producao: toNum(r[41]),
+          Ticket_Medio_Producao: toNum(r[42]),
+          IDWO: r[3] != null ? `10${Math.round(Number(r[3]))}` : undefined,
+        };
+      });
+
+    // Preenche IDs de Cliente/Plataforma/Categoria como bônus, quando o WO existir na ListaWOs
+    // (a ListaWOs não cobre todos os WOs — por isso os nomes acima vêm sempre da planilha)
+    try {
+      const listaWOs = await getListItems('ListaWOs');
+      const byWO = new Map<string, any>(listaWOs.map((w: any) => [String(w.WO ?? w.wo ?? '').trim(), w]));
+      for (const p of parsed) {
+        const match = byWO.get(String(p.WO_Producao ?? ''));
+        if (match) {
+          if (match.client_id != null) p.ID_Client_Producao = Number(match.client_id);
+          if (match.platform_id != null) p.ID_Rig_Producao = Number(match.platform_id);
+          if (match.ID_Contract_Category != null) p.ID_Contract_Category_Producao = Number(match.ID_Contract_Category);
+        }
+      }
+    } catch (e) { console.warn('Não foi possível cruzar com ListaWOs para preencher IDs:', e); }
+
+    return parsed;
+  };
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportFileName(file.name);
+    setImportResult(null);
+    try {
+      const parsed = await parseImportFile(file);
+      setImportPreview(parsed);
+    } catch (err: any) {
+      alert(`Erro ao ler a planilha: ${err.message}`);
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const confirmImport = async () => {
+    if (!importPreview) return;
+    setImportRunning(true);
+    try {
+      setImportProgress({ fase: "Apagando registros existentes...", done: 0, total: 1 });
+      const apagados = await deleteAllProducao((done, total) => setImportProgress({ fase: "Apagando registros existentes...", done, total }));
+      setImportProgress({ fase: "Importando registros novos...", done: 0, total: importPreview.length });
+      const { ok, errors } = await bulkCreateProducao(importPreview, (done, total) => setImportProgress({ fase: "Importando registros novos...", done, total }));
+      setImportResult({ apagados, criados: ok, erros: errors });
+      setImportPreview(null);
+      load();
+    } catch (err: any) {
+      alert(`Erro ao importar: ${err.message}`);
+    } finally {
+      setImportRunning(false);
+      setImportProgress(null);
+    }
+  };
+
   const stats = useMemo(() => ({
     count: filtered.length,
     value: filtered.reduce((s, x) => s + (x.Value_Producao ?? 0), 0),
@@ -2179,6 +2308,8 @@ function ProducaoPage() {
             {Object.values(colFilters).some(Boolean) && <button style={btn("#64748b")} onClick={clearColFilters}>✕ Limpar filtros</button>}
             <button style={btn("#059669")} onClick={() => { const f = { ...EMPTY_PROD }; setForm({ ...f, ...calcProducao(f) }); setEditing(f); }}>➕ Novo</button>
             <button style={btn("#6366f1")} onClick={() => exportCSV("bd_producao.csv", csvCols, filtered)}>⬇ CSV</button>
+            <input ref={fileInputRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }} onChange={handleImportFile} />
+            <button style={btn("#f59e0b")} onClick={() => fileInputRef.current?.click()} title="Substitui TODOS os registros pelos da planilha (aba Input)">📤 Importar Planilha</button>
             <button style={btn("#0891b2")} onClick={load} disabled={loading}>↺ {loading ? "⏳" : ""}</button>
           </div>
         </div>
@@ -2387,6 +2518,74 @@ function ProducaoPage() {
               <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
                 <button style={btn("#64748b")} onClick={() => setDelTarget(null)}>Cancelar</button>
                 <button style={btn("#dc2626")} onClick={del}>Excluir</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Importar planilha — preview + confirmação (ação destrutiva: apaga tudo antes) */}
+      {importPreview && !importRunning && (
+        <div style={S.modal} onClick={e => { if (e.target === e.currentTarget) setImportPreview(null); }}>
+          <div style={{ ...S.modalBox, maxWidth: 480 }}>
+            <div style={{ ...S.cardHeader, background: "#f59e0b", borderRadius: "14px 14px 0 0" }}>
+              <span style={{ color: "#fff", fontWeight: 700 }}>📤 Confirmar Importação</span>
+              <button onClick={() => setImportPreview(null)} style={{ background: "none", border: "none", color: "#fff", cursor: "pointer", fontSize: 18 }}>×</button>
+            </div>
+            <div style={{ padding: 20 }}>
+              <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontSize: 12, color: "#991b1b", lineHeight: 1.6 }}>
+                ⚠️ Isso vai <strong>apagar TODOS os {items.length} registros atuais</strong> da lista BD_Producao
+                e subir <strong>{importPreview.length} registros novos</strong> do arquivo <strong>{importFileName}</strong>.
+                Essa ação não pode ser desfeita.
+              </div>
+              <div style={{ background: N.bg, borderRadius: 8, padding: "10px 14px", fontSize: 12, color: N.muted, marginBottom: 16 }}>
+                {importPreview.length} linhas lidas · {[...new Set(importPreview.map(p => `${p.Month_Producao}/${p.Year_Producao}`))].length} meses distintos ·
+                Todos com País = Brasil
+              </div>
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                <button style={btn("#64748b")} onClick={() => setImportPreview(null)}>Cancelar</button>
+                <button style={btn("#dc2626")} onClick={confirmImport}>🗑 Apagar e Importar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Progresso da importação */}
+      {importRunning && importProgress && (
+        <div style={S.modal}>
+          <div style={{ ...S.modalBox, maxWidth: 420 }}>
+            <div style={{ padding: 24 }}>
+              <div style={{ fontWeight: 700, marginBottom: 10, color: N.text }}>{importProgress.fase}</div>
+              <div style={{ background: N.bg, borderRadius: 8, height: 10, overflow: "hidden", boxShadow: `inset 2px 2px 5px ${N.shadowD}` }}>
+                <div style={{ width: `${Math.round((importProgress.done / Math.max(importProgress.total, 1)) * 100)}%`, height: "100%", background: N.accent, transition: "width .2s" }} />
+              </div>
+              <div style={{ fontSize: 12, color: N.muted, marginTop: 8, textAlign: "center" as const }}>{importProgress.done} / {importProgress.total}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Resultado da importação */}
+      {importResult && (
+        <div style={S.modal} onClick={e => { if (e.target === e.currentTarget) setImportResult(null); }}>
+          <div style={{ ...S.modalBox, maxWidth: 460 }}>
+            <div style={{ ...S.cardHeader, background: importResult.erros.length ? "#f59e0b" : "#059669", borderRadius: "14px 14px 0 0" }}>
+              <span style={{ color: "#fff", fontWeight: 700 }}>{importResult.erros.length ? "⚠️ Importação concluída com erros" : "✅ Importação concluída"}</span>
+              <button onClick={() => setImportResult(null)} style={{ background: "none", border: "none", color: "#fff", cursor: "pointer", fontSize: 18 }}>×</button>
+            </div>
+            <div style={{ padding: 20 }}>
+              <div style={{ fontSize: 13, color: N.text, marginBottom: 10 }}>
+                Apagados: <strong>{importResult.apagados}</strong> · Importados: <strong>{importResult.criados}</strong>
+                {importResult.erros.length > 0 && <> · Erros: <strong style={{ color: "#dc2626" }}>{importResult.erros.length}</strong></>}
+              </div>
+              {importResult.erros.length > 0 && (
+                <div style={{ maxHeight: 200, overflowY: "auto" as const, background: N.bg, borderRadius: 8, padding: 10, fontSize: 11, color: "#991b1b" }}>
+                  {importResult.erros.map((e, i) => <div key={i} style={{ marginBottom: 4 }}>{e}</div>)}
+                </div>
+              )}
+              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
+                <button style={btn()} onClick={() => setImportResult(null)}>Fechar</button>
               </div>
             </div>
           </div>

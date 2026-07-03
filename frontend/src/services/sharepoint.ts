@@ -610,6 +610,66 @@ export async function deleteProducao(id: number): Promise<void> {
   if (!r.ok) throw new Error(`SP deleteProducao: ${r.status} — ${(await r.text()).slice(0, 200)}`);
 }
 
+// Roda tarefas com concorrência limitada — evita disparar centenas de requisições de uma vez
+async function runLimited<T>(items: T[], limit: number, task: (item: T, index: number) => Promise<void>, onProgress?: (done: number, total: number) => void) {
+  let next = 0, done = 0;
+  const total = items.length;
+  async function worker() {
+    while (next < total) {
+      const i = next++;
+      await task(items[i], i);
+      done++;
+      onProgress?.(done, total);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, total) }, worker));
+}
+
+export async function getAllProducaoIds(): Promise<number[]> {
+  const token = await getToken();
+  let all: number[] = [];
+  let url: string | null = `${SITE}/_api/web/lists/getbytitle('${PRODUCAO_LIST}')/items?$select=ID&$top=5000`;
+  while (url) {
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json;odata=nometadata' } });
+    if (!r.ok) throw new Error(`SP getAllProducaoIds: ${r.status}`);
+    const json = await r.json();
+    all = all.concat((json.value || []).map((x: any) => x.ID));
+    url = json['odata.nextLink'] || null;
+  }
+  return all;
+}
+
+export async function deleteAllProducao(onProgress?: (done: number, total: number) => void): Promise<number> {
+  const ids = await getAllProducaoIds();
+  const token = await getToken();
+  const digest = await getDigest();
+  await runLimited(ids, 8, async (id) => {
+    const r = await fetch(`${SITE}/_api/web/lists/getbytitle('${PRODUCAO_LIST}')/items(${id})`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'X-RequestDigest': digest, 'X-HTTP-Method': 'DELETE', 'If-Match': '*' },
+    });
+    if (!r.ok) throw new Error(`SP deleteAllProducao: ${r.status} — ${(await r.text()).slice(0, 200)}`);
+  }, onProgress);
+  return ids.length;
+}
+
+export async function bulkCreateProducao(items: ProducaoItem[], onProgress?: (done: number, total: number) => void): Promise<{ ok: number; errors: string[] }> {
+  const token = await getToken();
+  const digest = await getDigest();
+  const errors: string[] = [];
+  let ok = 0;
+  await runLimited(items, 8, async (p) => {
+    const r = await fetch(`${SITE}/_api/web/lists/getbytitle('${PRODUCAO_LIST}')/items`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'X-RequestDigest': digest, 'Content-Type': 'application/json', Accept: 'application/json;odata=nometadata' },
+      body: JSON.stringify(producaoToSp(p)),
+    });
+    if (!r.ok) errors.push(`WO ${p.WO_Producao} ${p.Month_Producao}/${p.Year_Producao}: ${r.status} ${(await r.text()).slice(0, 150)}`);
+    else ok++;
+  }, onProgress);
+  return { ok, errors };
+}
+
 // ── fContasReceber CRUD ───────────────────────────────────────────────────────
 const CONTAS_LIST = 'fContasReceber';
 
