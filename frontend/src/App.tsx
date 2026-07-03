@@ -895,6 +895,10 @@ function toSpConta(fields: Record<string, any>): Record<string, any> {
     const v = rest[key];
     if (v && typeof v === "object" && "__deferred" in v) delete rest[key];
   }
+  // draft_codigo é coluna de texto no SharePoint (por isso o GET converte pra number
+  // na leitura) — em odata=verbose o tipo precisa bater exatamente, senão dá
+  // "Cannot convert a primitive value to the expected type 'Edm.String'".
+  if (rest.draft_codigo != null) rest.draft_codigo = String(rest.draft_codigo);
   return wo != null ? { ...rest, Title: String(wo) } : rest;
 }
 
