@@ -700,6 +700,12 @@ export async function bulkCreateProducao(items: ProducaoItem[], onProgress?: (do
 // ── fContasReceber CRUD ───────────────────────────────────────────────────────
 const CONTAS_LIST = 'fContasReceber';
 
+// Tipo de entidade da lista, revelado pela própria mensagem de erro do SharePoint
+// ("The property '__metadata' does not exist on type 'SP.Data.FContasReceberListItem'").
+// odata=nometadata rejeitava a escrita com "entitySet null" — voltando ao formato
+// verbose completo (com __metadata.type) é o que essa lista/tenant exige para POST/MERGE.
+const CONTAS_ENTITY_TYPE = 'SP.Data.FContasReceberListItem';
+
 export async function createConta(data: Record<string, any>): Promise<any> {
   const token = await getToken();
   const digest = await getDigest();
@@ -707,18 +713,19 @@ export async function createConta(data: Record<string, any>): Promise<any> {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json;odata=nometadata',
-      Accept: 'application/json;odata=nometadata',
+      'Content-Type': 'application/json;odata=verbose',
+      Accept: 'application/json;odata=verbose',
       'X-RequestDigest': digest,
     },
-    body: JSON.stringify(data),
+    body: JSON.stringify({ __metadata: { type: CONTAS_ENTITY_TYPE }, ...data }),
   });
   if (!response.ok) {
     const err = await response.text();
     throw new Error(`SP create conta: ${response.status} — ${err.slice(0, 300)}`);
   }
   clearCache(CONTAS_LIST);
-  return response.json();
+  const json = await response.json();
+  return json.d ?? json;
 }
 
 export async function updateConta(id: number, data: Record<string, any>): Promise<void> {
@@ -728,13 +735,13 @@ export async function updateConta(id: number, data: Record<string, any>): Promis
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json;odata=nometadata',
-      Accept: 'application/json;odata=nometadata',
+      'Content-Type': 'application/json;odata=verbose',
+      Accept: 'application/json;odata=verbose',
       'X-RequestDigest': digest,
       'X-HTTP-Method': 'MERGE',
       'If-Match': '*',
     },
-    body: JSON.stringify(data),
+    body: JSON.stringify({ __metadata: { type: CONTAS_ENTITY_TYPE }, ...data }),
   });
   if (!response.ok) {
     const err = await response.text();
