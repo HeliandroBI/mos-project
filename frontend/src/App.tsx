@@ -373,7 +373,7 @@ function SearchSelect({ options, value, onChange, placeholder }: {
 }
 
 /** Input de moeda: exibe R$ 1.234,56 quando desfocado, edita como "1234,56" quando focado */
-function CurrencyInput({ value, onChange, style, bold }: { value?: number; onChange: (v: number | undefined) => void; style?: React.CSSProperties; bold?: boolean }) {
+function CurrencyInput({ value, onChange, style, bold, autoFocus }: { value?: number; onChange: (v: number | undefined) => void; style?: React.CSSProperties; bold?: boolean; autoFocus?: boolean }) {
   const [focused, setFocused] = useState(false);
   const [raw, setRaw] = useState("");
 
@@ -383,6 +383,7 @@ function CurrencyInput({ value, onChange, style, bold }: { value?: number; onCha
 
   return (
     <input
+      autoFocus={autoFocus}
       style={{ ...style, fontWeight: bold ? 700 : undefined }}
       value={focused ? raw : formatted}
       placeholder="0,00"
@@ -904,7 +905,7 @@ function ContasPage({ drafts, projetos, impostos, onDraftsChanged, spAccount, re
   // edição inline: { id, field }
   const [inlineEdit, setInlineEdit] = useState<{ id: number; field: string } | null>(null);
 
-  const quickSave = async (row: ContaReceber, field: string, value: string) => {
+  const quickSave = async (row: ContaReceber, field: string, value: any) => {
     setInlineEdit(null);
     if ((row as any)[field] === value) return;
     try { await updateConta(row.id!, { [field]: value }); fetchData(); }
@@ -1150,7 +1151,14 @@ function ContasPage({ drafts, projetos, impostos, onDraftsChanged, spAccount, re
                           </select>
                         : <span title="Clique para editar">{row.faturado_por || <span style={{ color: N.muted }}>—</span>}</span>}
                     </td>
-                    <td style={{ ...S.td, fontWeight: 700 }}>{fmt.brl(row.vl_bruto)}</td>
+                    {/* Vl. Bruto — inline edit no duplo clique */}
+                    <td style={{ ...S.td, fontWeight: 700, cursor: "pointer" }} onDoubleClick={() => setInlineEdit({ id: row.id!, field: "vl_bruto" })}>
+                      {inlineEdit?.id === row.id && inlineEdit.field === "vl_bruto"
+                        ? <CurrencyInput autoFocus bold style={{ ...S.input, width: 100, padding: "3px 6px" }}
+                            value={row.vl_bruto}
+                            onChange={v => quickSave(row, "vl_bruto", v ?? 0)} />
+                        : <span title="Dois cliques para editar">{fmt.brl(row.vl_bruto)}</span>}
+                    </td>
                     <td style={{ ...S.td, color: "#dc2626" }}>{fmt.brl(row.total_retido)}</td>
                     <td style={{ ...S.td, color: "#059669", fontWeight: 700 }}>{fmt.brl(row.vl_liquido)}</td>
                     <td style={S.td}>{fmt.date(row.vencimento)}</td>
