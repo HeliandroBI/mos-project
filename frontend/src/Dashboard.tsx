@@ -59,7 +59,7 @@ const diffDays = (d?: string) => d ? Math.round((today.getTime() - new Date(d).g
 const rangeBucket = (d: number) => d <= 10 ? "0-10" : d <= 20 ? "11-20" : d <= 30 ? "21-30" : "30+";
 
 const STATUS_COLOR: Record<string, string> = {
-  "PAGO": "#10b981", "Aguardando Pagamento": "#3b82f6", "A Começar": "#8b5cf6",
+  "PAGO": "#10b981", "Pago": "#10b981", "Aguardando Pagamento": "#3b82f6", "A Começar": "#8b5cf6",
   "Em andamento": "#0ea5e9", "Gerência": "#f59e0b",
   "Aguardando Resposta do Cliente": "#f97316", "Cancelado": "#6b7280",
   "cancelado": "#6b7280", "Aguardando Inf. Interna": "#ec4899",
@@ -316,7 +316,7 @@ function PageStatus({ data, S, T }: { data: Conta[]; S: ReturnType<typeof mkStyl
     data.forEach(c => {
       const s = c.status ?? ""; map[s] = (map[s] ?? 0) + (c.vl_bruto ?? 0);
       t += (c.vl_bruto ?? 0);
-      if (s === "PAGO") pg += (c.vl_bruto ?? 0);
+      if (s.toUpperCase() === "PAGO") pg += (c.vl_bruto ?? 0);
       else if (["A Começar","Em andamento"].includes(s)) af += (c.vl_bruto ?? 0);
       else pend += (c.vl_bruto ?? 0);
     });
@@ -790,7 +790,7 @@ export default function Dashboard({ dark = false, onToggleDark, page = "status",
     if (filters.doc)        d = d.filter(c => c.doc === filters.doc);
     if (filters.escopo)     d = d.filter(c => c.escopo === filters.escopo);
     if (filters.faturado_por) d = d.filter(c => (c.faturado_por ?? "").toLowerCase().includes(filters.faturado_por.toLowerCase()));
-    if (filters.status)     d = d.filter(c => c.status === filters.status);
+    if (filters.status)     d = d.filter(c => (c.status ?? "").toUpperCase() === filters.status.toUpperCase());
     return d;
   }, [all, filters]);
 

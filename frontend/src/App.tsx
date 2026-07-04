@@ -1,11 +1,13 @@
 import Dashboard from "./Dashboard";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { initMsal, getSpAccount, loginSharePoint, logoutSharePoint, postWOToSharePoint, getListItems, getToken, listWOs, createWO, updateWO, deleteWO, getListFields, listProjects, createProject, updateProject, deleteProject, createConta, updateConta, deleteConta, listProjetosFromSP, createProjeto, updateProjeto, deleteProjeto, listProducaoFromSP, createProducao, updateProducao, deleteProducao, deleteAllProducao, bulkCreateProducao, ID_COUNTRY_BR, type WOItem, type ProjectItem, type ProducaoItem } from "./services/sharepoint";
 import * as XLSX from "xlsx";
 
 import { STATIC_DRAFTS, STATIC_CLIENTES_PRAZOS } from "./staticData";
 import STATIC_PROJETOS_RAW from "./staticProjetos.json";
 import STATIC_QUALTECH_PROJECTS from "./staticQualtechProjects.json";
+import STATIC_WO_IDS from "./staticWoIds.json";
 
 
 type Tab = "contas" | "dashboard" | "impostos" | "clientes" | "projetos" | "drafts" | "feriados"
@@ -195,7 +197,7 @@ const grid = (cols: number): React.CSSProperties => ({ display: "grid", gridTemp
 const navBtn = (active: boolean): React.CSSProperties => ({ background: active ? N.accent : "transparent", color: active ? "#fff" : N.muted, border: "none", padding: "8px 14px", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: active ? 700 : 400, whiteSpace: "nowrap" as const, boxShadow: active ? `inset 2px 2px 6px rgba(0,0,0,.2)` : "none", transition: "all .15s" });
 
 const STATUS_COLORS: Record<string, [string, string]> = {
-  "PAGO": ["#dcfce7", "#166534"], "Programado": ["#dbeafe", "#1e40af"],
+  "PAGO": ["#dcfce7", "#166534"], "Pago": ["#dcfce7", "#166534"], "Programado": ["#dbeafe", "#1e40af"],
   "Aguardando Pagamento": ["#fef9c3", "#854d0e"], "Em andamento": ["#e0f2fe", "#0c4a6e"],
   "Previsão": ["#f3e8ff", "#6b21a8"], "Enviar NF": ["#ffedd5", "#9a3412"],
 };
@@ -221,15 +223,22 @@ function FilterHeader({ label, width, sortDir, onSort, active, onClear, children
   children?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const thRef = useRef<HTMLTableCellElement>(null);
+  const [popPos, setPopPos] = useState<{ top: number; left: number } | null>(null);
   useEffect(() => {
     if (!open) return;
     const close = () => setOpen(false);
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, [open]);
+  useEffect(() => {
+    if (!open) { setPopPos(null); return; }
+    const r = thRef.current?.getBoundingClientRect();
+    if (r) setPopPos({ top: r.bottom + 4, left: r.left });
+  }, [open]);
 
   return (
-    <th style={{ ...S.th, width, position: "relative" as const }} onClick={e => e.stopPropagation()}>
+    <th ref={thRef} style={{ ...S.th, width, position: "relative" as const }} onClick={e => e.stopPropagation()}>
       <div style={{ display: "flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" as const }}>
         <span style={{ cursor: onSort ? "pointer" : "default", userSelect: "none" as const }} onClick={onSort}>{label}</span>
         {onSort && (
@@ -253,15 +262,18 @@ function FilterHeader({ label, width, sortDir, onSort, active, onClear, children
           </span>
         )}
       </div>
-      {open && children && (
+      {/* Portal para <body>: o card da tabela tem overflow:hidden (pelos cantos arredondados)
+          e cortava esse popover sempre que a lista filtrada ficava curta. */}
+      {open && children && popPos && createPortal(
         <div
           onMouseDown={e => e.stopPropagation()}
           onClick={e => e.stopPropagation()}
-          style={{ position: "absolute", top: "100%", left: 0, zIndex: 30, background: N.card, boxShadow: `6px 6px 16px ${N.shadowD}, -3px -3px 10px ${N.shadowL}`, borderRadius: 10, padding: 10, marginTop: 4, minWidth: 200, textTransform: "none" as const, fontWeight: 400 }}
+          style={{ position: "fixed", top: popPos.top, left: popPos.left, zIndex: 1000, background: N.card, boxShadow: `6px 6px 16px ${N.shadowD}, -3px -3px 10px ${N.shadowL}`, borderRadius: 10, padding: 10, minWidth: 200, textTransform: "none" as const, fontWeight: 400 }}
         >
           {children}
           {active && <button style={{ ...btnSm("#64748b"), marginTop: 8, width: "100%", justifyContent: "center" }} onClick={() => { onClear?.(); setOpen(false); }}>✕ Limpar filtro</button>}
-        </div>
+        </div>,
+        document.body
       )}
     </th>
   );
@@ -465,7 +477,13 @@ const FERIADOS_SET = new Set(STATIC_FERIADOS.map(f => f.data));
 
 function parseDataInput(s?: string): Date | undefined {
   if (!s) return undefined;
-  const d = new Date(s + "T12:00:00");
+  // SharePoint pode devolver a data como /Date(ms)/, como ISO completo (2025-04-15T03:00:00Z)
+  // ou como YYYY-MM-DD puro — normaliza para YYYY-MM-DD antes de fixar meio-dia local.
+  let dateOnly = s;
+  const spMs = s.match(/\/Date\((-?\d+)(?:[+-]\d+)?\)\//);
+  if (spMs) dateOnly = new Date(parseInt(spMs[1])).toISOString().slice(0, 10);
+  else if (s.includes("T")) dateOnly = s.slice(0, 10);
+  const d = new Date(dateOnly + "T12:00:00");
   return isNaN(d.getTime()) ? undefined : d;
 }
 function addDias(d: Date, n: number): Date {
@@ -593,7 +611,9 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraft
 
   const calcVlBruto = (f: ContaReceber, pd: typeof projData): number | undefined => {
     if (!f.data_inicio || !f.data_fim) return undefined;
-    const dias = Math.round((new Date(f.data_fim + "T12:00:00").getTime() - new Date(f.data_inicio + "T12:00:00").getTime()) / 86400000) + 1;
+    const di = parseDataInput(f.data_inicio), df = parseDataInput(f.data_fim);
+    if (!di || !df) return undefined;
+    const dias = Math.round((df.getTime() - di.getTime()) / 86400000) + 1;
     if (dias <= 0) return undefined;
     if (f.escopo === "SERVIÇO") {
       return pd.vl_diaria != null ? pd.vl_diaria * dias : undefined;
@@ -606,7 +626,9 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraft
   // Breakdown para exibir no form
   const calcBreakdown = (): string | null => {
     if (!form.data_inicio || !form.data_fim) return null;
-    const dias = Math.round((new Date(form.data_fim + "T12:00:00").getTime() - new Date(form.data_inicio + "T12:00:00").getTime()) / 86400000) + 1;
+    const di = parseDataInput(form.data_inicio), df = parseDataInput(form.data_fim);
+    if (!di || !df) return null;
+    const dias = Math.round((df.getTime() - di.getTime()) / 86400000) + 1;
     if (dias <= 0) return null;
     const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
     if (form.escopo === "SERVIÇO") {
@@ -624,7 +646,9 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraft
 
   const handleChange = (k: keyof ContaReceber, v: any) => {
     const updated = { ...form, [k]: v };
-    if (["escopo", "data_inicio", "data_fim"].includes(k as string)) {
+    // Vl.Bruto só é recalculado automaticamente ao lançar (registro ainda sem id) — depois de
+    // salvo, o usuário pode ter corrigido o valor manualmente e editar Escopo/Datas não deve sobrescrever.
+    if (!form.id && ["escopo", "data_inicio", "data_fim"].includes(k as string)) {
       const newVl = calcVlBruto(updated, projData);
       if (newVl != null) updated.vl_bruto = +newVl.toFixed(2);
     }
@@ -676,8 +700,12 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraft
     if (!plataforma) plataforma = qtProj?.plataforma || '';
 
     const updated = { ...form, wo: woNum, cliente, plataforma, coord_focal };
-    const newVl = calcVlBruto(updated, pd);
-    if (newVl != null) updated.vl_bruto = +newVl.toFixed(2);
+    // Mesma regra do handleChange: só preenche Vl.Bruto sozinho enquanto o registro
+    // ainda não foi salvo — depois de salvo o valor é responsabilidade do usuário.
+    if (!form.id) {
+      const newVl = calcVlBruto(updated, pd);
+      if (newVl != null) updated.vl_bruto = +newVl.toFixed(2);
+    }
     setForm({ ...updated, ...calcImpostos(updated, impostos), ...calcPrazos(updated) });
   };
 
@@ -745,8 +773,8 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraft
                     {projetos.length > 0 && <option disabled>─── Backend ───</option>}
                   </>
                 ) : null}
-                {projetos.map(p => (
-                  <option key={p.wo} value={p.wo}>{p.wo}{p.cliente ? ` — ${p.cliente}` : ""}{p.plataforma ? ` · ${p.plataforma}` : ""}</option>
+                {projetos.map((p, i) => (
+                  <option key={p.id ?? `proj-${i}`} value={p.wo}>{p.wo}{p.cliente ? ` — ${p.cliente}` : ""}{p.plataforma ? ` · ${p.plataforma}` : ""}</option>
                 ))}
                 {qtOnlyOptions.length > 0 && <option disabled>─── Catálogo Qualitech ───</option>}
                 {qtOnlyOptions.map(p => (
@@ -1044,13 +1072,10 @@ function ContasPage({ drafts, projetos, impostos, onDraftsChanged, spAccount, re
           <div style={{ display: "flex", gap: 5 }}>
             {Object.entries(filters).some(([k,v]) => !k.startsWith("_") && v) && <button style={btn("#64748b")} onClick={() => setFilters({})}>✕ Limpar filtros</button>}
             {!readOnly && <button style={btn("#059669")} onClick={() => setEditing({})}>➕ Novo</button>}
-            {!readOnly && <button style={btn("#0891b2")} title="Recalcula VL.Bruto, impostos, Vencimento, Prev.Fat e Prev.Pag de todos os registros" onClick={() => {
-              alert("Recálculo disponível apenas com backend ativo.");
-            }}>⟳ Recalcular Tudo</button>}
             {!readOnly && <label style={{ ...btn("#f59e0b"), cursor: "pointer" }}>📤 Importar CSV<input type="file" accept=".csv" style={{ display: "none" }} onChange={uploadCSV} /></label>}
           </div>
         </div>
-        <div style={{ overflowX: "auto" }}>
+        <div style={{ overflowX: "auto", overflowY: "visible" }}>
           <table style={S.table}>
             <thead>
               <tr>
@@ -1293,7 +1318,7 @@ function CRUDPage<T extends { id?: number }>({ title, icon, endpoint, columns, e
             {!readOnly && <button style={btn("#059669")} onClick={() => { setForm({ ...emptyItem }); setEditing({ ...emptyItem }); }}>➕ Novo</button>}
           </div>
         </div>
-        <div style={{ overflowX: "auto" }}>
+        <div style={{ overflowX: "auto", overflowY: "visible" }}>
           <table style={S.table}>
             <thead>
               <tr>
@@ -1437,7 +1462,7 @@ function DraftsPage({ onDraftsChanged }: { onDraftsChanged?: () => void }) {
           <span style={S.cardTitle}>📝 Drafts ({filtered.length}{filtered.length !== items.length ? ` de ${items.length}` : ""})</span>
           {Object.values(colFilters).some(Boolean) && <button style={btn("#64748b")} onClick={() => setColFilters({})}>✕ Limpar filtros</button>}
         </div>
-        <div style={{ overflowX: "auto" }}>
+        <div style={{ overflowX: "auto", overflowY: "visible" }}>
           <table style={S.table}>
             <thead>
               <tr>
@@ -1504,7 +1529,7 @@ function ProjectListPage({ spAccount, onLogin, onLogout }: {
   };
 
   const loadAPI = async () => {
-    // Backend Railway removido — sem dados de API externos
+    // Sem backend externo — sem dados de API externos
     setApiItems([]);
     setClients([]);
     setPlatforms([]);
@@ -1597,7 +1622,7 @@ function ProjectListPage({ spAccount, onLogin, onLogout }: {
           </div>
           {apiItems.length === 0
             ? <div style={{ padding: "16px 20px", color: N.muted, fontSize: 12 }}>Backend offline ou sem WOs na API.</div>
-            : <div style={{ overflowX: "auto" }}>
+            : <div style={{ overflowX: "auto", overflowY: "visible" }}>
                 <table style={S.table}>
                   <thead><tr>
                     <th style={{ ...S.th, width: 100 }}>Ação</th>
@@ -1647,7 +1672,7 @@ function ProjectListPage({ spAccount, onLogin, onLogout }: {
             {view !== "brasil" && <button style={btn("#059669")} onClick={() => { setForm({ project_number: 0, IDCountry: view === "internacional" ? 40 : ID_COUNTRY_BR }); setEditing({} as ProjectItem); }}>➕ Novo</button>}
           </div>
         </div>
-        <div style={{ overflowX: "auto" }}>
+        <div style={{ overflowX: "auto", overflowY: "visible" }}>
           <table style={S.table}>
             <thead><tr>
               <th style={{ ...S.th, width: 80 }}>Ações</th>
@@ -1774,7 +1799,7 @@ function ListaWOsPage({ spAccount, onLogin, onLogout }: {
   };
 
   const loadApiOptions = async () => {
-    // Backend Railway removido — inputs manuais sem lookup de API
+    // Sem backend externo — inputs manuais sem lookup de API
     setClients([]);
     setPlatforms([]);
     setContractCategories([]);
@@ -1843,7 +1868,7 @@ function ListaWOsPage({ spAccount, onLogin, onLogout }: {
             <button style={btn("#059669")} onClick={openNew}>➕ Novo WO</button>
           </div>
         </div>
-        <div style={{ overflowX: "auto" }}>
+        <div style={{ overflowX: "auto", overflowY: "visible" }}>
           <table style={S.table}>
             <thead><tr>
               <th style={{ ...S.th, width: 80 }}>Ações</th>
@@ -2144,20 +2169,43 @@ function ProducaoPage({ readOnly }: { readOnly?: boolean }) {
         };
       });
 
-    // Preenche IDs de Cliente/Plataforma/Categoria como bônus, quando o WO existir na ListaWOs
-    // (a ListaWOs não cobre todos os WOs — por isso os nomes acima vêm sempre da planilha)
+    // Resolve IDs e nomes canônicos de Cliente/Plataforma/Categoria pelo WO — fonte primária é o
+    // de-para estático (API Qualtech + planilha histórica de WOs, ver staticWoIds.json), que cobre
+    // muito mais WOs que a ListaWOs do SharePoint. Quando há match, o nome canônico substitui o texto
+    // digitado na planilha (que não tem padrão); sem match, mantém o texto da planilha como fallback.
+    const staticById = new Map<number, typeof STATIC_WO_IDS[number]>(
+      (STATIC_WO_IDS as typeof STATIC_WO_IDS).map(w => [w.wo, w])
+    );
+    const semIdContractCategory: number[] = [];
+    for (const p of parsed) {
+      const match = p.WO_Producao != null ? staticById.get(p.WO_Producao) : undefined;
+      if (match) {
+        if (match.client_id != null) { p.ID_Client_Producao = match.client_id; p.Nome_Cliente_Producao = match.client_name ?? p.Nome_Cliente_Producao; }
+        if (match.platform_id != null) { p.ID_Rig_Producao = match.platform_id; p.Rig_Producao = match.platform_name ?? p.Rig_Producao; }
+        if (match.contract_category_id != null) { p.ID_Contract_Category_Producao = match.contract_category_id; p.Contract_Category_Producao = match.contract_category_name ?? p.Contract_Category_Producao; }
+      }
+      if (!p.ID_Contract_Category_Producao && p.WO_Producao != null) semIdContractCategory.push(p.WO_Producao);
+    }
+
+    // Fallback extra: ListaWOs do SharePoint pode ter WOs mais recentes que ainda não entraram
+    // no de-para estático — só preenche o que ainda estiver faltando.
     try {
       const listaWOs = await getListItems('ListaWOs');
       const byWO = new Map<string, any>(listaWOs.map((w: any) => [String(w.WO ?? w.wo ?? '').trim(), w]));
       for (const p of parsed) {
+        if (p.ID_Client_Producao != null && p.ID_Rig_Producao != null) continue;
         const match = byWO.get(String(p.WO_Producao ?? ''));
         if (match) {
-          if (match.client_id != null) p.ID_Client_Producao = Number(match.client_id);
-          if (match.platform_id != null) p.ID_Rig_Producao = Number(match.platform_id);
-          if (match.ID_Contract_Category != null) p.ID_Contract_Category_Producao = Number(match.ID_Contract_Category);
+          if (p.ID_Client_Producao == null && match.client_id != null) p.ID_Client_Producao = Number(match.client_id);
+          if (p.ID_Rig_Producao == null && match.platform_id != null) p.ID_Rig_Producao = Number(match.platform_id);
+          if (p.ID_Contract_Category_Producao == null && match.ID_Contract_Category != null) p.ID_Contract_Category_Producao = Number(match.ID_Contract_Category);
         }
       }
     } catch (e) { console.warn('Não foi possível cruzar com ListaWOs para preencher IDs:', e); }
+
+    if (semIdContractCategory.length > 0) {
+      console.warn(`Importação: ${semIdContractCategory.length} WO(s) sem ID de Contract Category (revisar manualmente):`, [...new Set(semIdContractCategory)]);
+    }
 
     return parsed;
   };
@@ -2200,6 +2248,7 @@ function ProducaoPage({ readOnly }: { readOnly?: boolean }) {
     count: filtered.length,
     value: filtered.reduce((s, x) => s + (x.Value_Producao ?? 0), 0),
     total: filtered.reduce((s, x) => s + (x.Total_Producao ?? 0), 0),
+    totalDaily: filtered.reduce((s, x) => s + (x.Total_Daily_Producao ?? 0), 0),
     wip:   filtered.reduce((s, x) => s + (x.WIP_Producao ?? 0), 0),
     inv:   filtered.reduce((s, x) => s + (x.Invoice_Total_Value_Producao ?? 0), 0),
   }), [filtered]);
@@ -2250,7 +2299,7 @@ function ProducaoPage({ readOnly }: { readOnly?: boolean }) {
       {/* Stats */}
       <div style={{ display:"flex", gap:12, marginBottom:12, flexWrap:"wrap" as const }}>
         {([
-          ["Registros", items.length, "#0f172a"],
+          ["Total Daily", fmt.brl(stats.totalDaily), "#0f172a"],
           ["Valor (Value)", fmt.brl(stats.value), "#0284c7"],
           ["Total Produção", fmt.brl(stats.total), "#059669"],
           ["WIP", fmt.brl(stats.wip), "#f59e0b"],
@@ -2866,7 +2915,7 @@ function PermissionamentoPage() {
 
       <div style={S.card}>
         <div style={S.cardHeader}><span style={S.cardTitle}>👤 Setor por Email</span></div>
-        <div style={{ overflowX: "auto" }}>
+        <div style={{ overflowX: "auto", overflowY: "visible" }}>
           <table style={S.table}>
             <thead><tr><th style={S.th}>Email</th><th style={S.th}>Setor</th></tr></thead>
             <tbody>
@@ -2883,7 +2932,7 @@ function PermissionamentoPage() {
 
       <div style={{ ...S.card, marginTop: 16 }}>
         <div style={S.cardHeader}><span style={S.cardTitle}>🔐 Nível de Acesso por Página</span></div>
-        <div style={{ overflowX: "auto" }}>
+        <div style={{ overflowX: "auto", overflowY: "visible" }}>
           <table style={S.table}>
             <thead><tr><th style={S.th}>Página</th><th style={S.th}>Padrão</th><th style={S.th}>Exceções por Setor</th><th style={S.th}>Exceções por Email</th></tr></thead>
             <tbody>
