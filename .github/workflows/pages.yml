@@ -34,6 +34,7 @@ jobs:
         env:
           VITE_DEMO: "true"
           VITE_BASE_URL: "/mos-project/"
+          VITE_PRODUCAO_VISIBILITY: "hide"
 
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -13,6 +13,12 @@ import STATIC_WO_IDS from "./staticWoIds.json";
 type Tab = "contas" | "dashboard" | "impostos" | "clientes" | "projetos" | "drafts" | "feriados"
          | "producao" | "permissionamento";
 
+// ===== VISIBILIDADE DA ABA PRODUCTION PROJECTS POR AMBIENTE DE DEPLOY =====
+// Temporário, enquanto não existe RLS de verdade: cada build (GitHub Pages / Azure) pode
+// esconder ou restringir a aba Production Projects via variável de ambiente de build.
+// VITE_PRODUCAO_VISIBILITY = "hide" (esconde só ela) | "only" (mostra só ela) | vazio (normal).
+const PRODUCAO_VISIBILITY = import.meta.env.VITE_PRODUCAO_VISIBILITY as "hide" | "only" | undefined;
+
 // ===== PERMISSIONAMENTO POR PÁGINA (fixo no código — para alterar, peça a mudança e o deploy) =====
 type NivelAcesso = "nenhum" | "ver" | "editar";
 
@@ -746,7 +752,7 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraft
 
         {/* Header elegante */}
         <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 36px 12px 18px", borderBottom: `1px solid ${N.shadowD}` }}>
-          <img src="/logo-icon.png" alt="MOS" style={{ height: 38, borderRadius: 8 }} />
+          <img src={`${import.meta.env.BASE_URL}logo-icon.png`} alt="MOS" style={{ height: 38, borderRadius: 8 }} />
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 800, fontSize: 15, color: N.text, letterSpacing: "-0.01em" }}>
               {form.id ? `Editar Conta #${form.id}` : "Nova Conta a Receber"}
@@ -2610,7 +2616,12 @@ function ProducaoPage({ readOnly }: { readOnly?: boolean }) {
 }
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>(() => (sessionStorage.getItem("mos-tab") as Tab) || "contas");
+  const [tab, setTab] = useState<Tab>(() => {
+    if (PRODUCAO_VISIBILITY === "only") return "producao";
+    const saved = sessionStorage.getItem("mos-tab") as Tab | null;
+    if (PRODUCAO_VISIBILITY === "hide" && saved === "producao") return "contas";
+    return saved || "contas";
+  });
   const changeTab = (t: Tab) => {
     sessionStorage.setItem("mos-tab", t);
     sessionStorage.setItem("mos-active-tab", t); // preserva para restaurar após login redirect
@@ -2629,7 +2640,11 @@ export default function App() {
   // Antes do login ainda não sabemos o setor da pessoa — mostra tudo normalmente (cada
   // página já tem sua própria mensagem de "faça login"); a restrição por setor só entra
   // em vigor depois que a pessoa loga e a gente sabe o email dela.
-  const nivel = (page: Tab): NivelAcesso => userEmail ? getNivelAcesso(page, userEmail) : "editar";
+  const nivel = (page: Tab): NivelAcesso => {
+    if (PRODUCAO_VISIBILITY === "hide" && page === "producao") return "nenhum";
+    if (PRODUCAO_VISIBILITY === "only" && page !== "producao") return "nenhum";
+    return userEmail ? getNivelAcesso(page, userEmail) : "editar";
+  };
 
   // Re-apply theme globals on every dark change
   const T = THEMES[dark ? "dark" : "light"];
