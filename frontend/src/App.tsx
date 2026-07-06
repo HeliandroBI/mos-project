@@ -2677,11 +2677,13 @@ export default function App() {
   return (
     <div style={S.app}>
       <div style={S.header}>
-        <img src={dark ? "/logo-full-dark.png" : "/logo-full.png"} alt="Qualitech" style={{ height: 36, objectFit: "contain" }} />
-        <div>
-          <div style={{ fontWeight: 800, fontSize: 16, color: T.text }}>QT - FIN - Contas a Receber</div>
-          <div style={{ fontSize: 11, color: T.muted }}>Offshore Workboard · Qualtech IRM</div>
-        </div>
+        <img src={`${import.meta.env.BASE_URL}${dark ? "logo-full-dark.png" : "logo-full.png"}`} alt="Qualitech" style={{ height: 36, objectFit: "contain" }} />
+        {PRODUCAO_VISIBILITY !== "only" && (
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 16, color: T.text }}>QT - FIN - Contas a Receber</div>
+            <div style={{ fontSize: 11, color: T.muted }}>Offshore Workboard · Qualtech IRM</div>
+          </div>
+        )}
         <div style={{ flex: 1 }} />
         {/* SP login/logout */}
         {spAccount ? (
