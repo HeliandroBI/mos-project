@@ -2864,20 +2864,23 @@ export default function App() {
         ]}
         emptyItem={{ wo: 0, cliente: "", plataforma: "", coordenador: "", tipo_servico: "", ativo: true, vl_diaria: undefined, vl_diaria_locacao: undefined, vl_outros: undefined }}
         renderForm={(f, set) => {
-          const qtProjs = STATIC_QUALTECH_PROJECTS as { project_number: number; cliente: string; plataforma: string }[];
+          // De-para WO→Cliente/Plataforma vem do staticWoIds.json (API Qualtech + planilha histórica,
+          // ver staticWoIds.json) — cobre muito mais WOs (e mais recentes) que o antigo
+          // staticQualtechProjects.json, que era um snapshot congelado e parou de ser atualizado.
+          const qtProjs = STATIC_WO_IDS as typeof STATIC_WO_IDS;
           const coordOpts = ["AJ","AS","GR","MF","MS","TC","VR"];
           const handleWO = (pn: number) => {
             set("wo", pn);
-            const qt = qtProjs.find(p => p.project_number === pn);
-            if (qt) { set("cliente", qt.cliente || ""); set("plataforma", qt.plataforma || ""); }
+            const qt = qtProjs.find(p => p.wo === pn);
+            if (qt) { set("cliente", qt.client_name || ""); set("plataforma", qt.platform_name || ""); }
           };
           return (<>
             <Field label="WO">
               <select style={S.select} value={f.wo || ""} onChange={e => handleWO(+e.target.value)}>
                 <option value="">Selecione a WO...</option>
                 {qtProjs.map(p => (
-                  <option key={p.project_number} value={p.project_number}>
-                    {p.project_number}{p.cliente ? ` — ${p.cliente}` : ""}{p.plataforma ? ` · ${p.plataforma}` : ""}
+                  <option key={p.wo} value={p.wo}>
+                    {p.wo}{p.client_name ? ` — ${p.client_name}` : ""}{p.platform_name ? ` · ${p.platform_name}` : ""}
                   </option>
                 ))}
               </select>
