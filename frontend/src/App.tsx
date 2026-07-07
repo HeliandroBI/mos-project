@@ -1297,16 +1297,20 @@ function CRUDPage<T extends { id?: number }>({ title, icon, endpoint, columns, e
   if (sort) filtered.sort((a, b) => genericCompare((a as any)[sort.key], (b as any)[sort.key]) * (sort.dir === "asc" ? 1 : -1));
   const setField = (k: keyof T, v: any) => setForm(prev => ({ ...prev, [k]: v }));
   const save = async () => {
-    if (spSave) { await spSave(form); setEditing(null); load(); return; }
-    console.warn("Save não disponível: sem backend ou SP configurado");
-    setEditing(null);
+    try {
+      if (spSave) { await spSave(form); setEditing(null); load(); return; }
+      console.warn("Save não disponível: sem backend ou SP configurado");
+      setEditing(null);
+    } catch (e: any) { alert(`Erro ao salvar: ${e.message || e}`); }
   };
   const del = async (responsavel: string, motivo: string) => {
     if (!delTarget?.id) return;
-    if (spDelete) { await spDelete(delTarget.id); setDelTarget(null); load(); return; }
-    const resumo = Object.entries(delTarget as any).filter(([k]) => !["id","criado_em","atualizado_em"].includes(k)).map(([k,v]) => `${k}: ${v}`).join(" | ").slice(0, 300);
-    await logAndDelete(endpoint, delTarget.id, resumo, responsavel, motivo);
-    setDelTarget(null); load();
+    try {
+      if (spDelete) { await spDelete(delTarget.id); setDelTarget(null); load(); return; }
+      const resumo = Object.entries(delTarget as any).filter(([k]) => !["id","criado_em","atualizado_em"].includes(k)).map(([k,v]) => `${k}: ${v}`).join(" | ").slice(0, 300);
+      await logAndDelete(endpoint, delTarget.id, resumo, responsavel, motivo);
+      setDelTarget(null); load();
+    } catch (e: any) { alert(`Erro ao excluir: ${e.message || e}`); }
   };
 
   return (
