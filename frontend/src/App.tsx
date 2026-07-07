@@ -1278,8 +1278,18 @@ function CRUDPage<T extends { id?: number }>({ title, icon, endpoint, columns, e
   const [delTarget, setDelTarget] = useState<T | null>(null);
   const [colFilters, setColFilters] = useState<Record<string, Set<string> | null>>({});
   const [sort, setSort] = useState<{ key: string; dir: SortDir } | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const load = () => {
-    if (spLoad) { spLoad().then(data => setItems(data)).catch(() => { if (staticData) setItems(staticData); }); return; }
+    if (spLoad) {
+      spLoad().then(data => { setItems(data); setLoadError(null); })
+        .catch((e: any) => {
+          // Cai pro fallback estático (dados podem estar desatualizados), mas avisa —
+          // sem isso a tela parece normal e só quebra na hora de salvar/editar.
+          setLoadError(e?.message || "Não foi possível carregar do SharePoint");
+          if (staticData) setItems(staticData);
+        });
+      return;
+    }
     if (staticData) { setItems(staticData); return; }
     setItems([]);
   };
@@ -1318,6 +1328,13 @@ function CRUDPage<T extends { id?: number }>({ title, icon, endpoint, columns, e
       {info && <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 10, padding: "8px 14px", marginBottom: 10, fontSize: 12, color: "#1e40af" }}>
         📋 {info}
       </div>}
+      {loadError && (
+        <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10, padding: "10px 16px", marginBottom: 12, fontSize: 12, color: "#991b1b" }}>
+          ⚠️ Não foi possível carregar do SharePoint — mostrando dados salvos localmente, podem estar desatualizados: <strong>{loadError}</strong>
+          {loadError.includes("autenticado") && " Clique em \"Entrar\" no topo da página."}
+          <button onClick={load} style={{ marginLeft: 12, background: "#dc2626", border: "none", color: "#fff", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 11 }}>Tentar novamente</button>
+        </div>
+      )}
       <div style={S.card}>
         <div style={S.cardHeader}>
           <span style={S.cardTitle}>{icon} {title} ({filtered.length}{filtered.length !== items.length ? ` de ${items.length}` : ""})</span>
