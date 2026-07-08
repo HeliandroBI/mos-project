@@ -615,12 +615,25 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraft
     }
   }, [spAccount]);
 
+  // Preenche projData pra uma conta já existente (WO selecionada desde a abertura do form) —
+  // sem isso, editar uma conta sempre mostrava "sem Vl. Diária cadastrado" mesmo quando a WO
+  // já tinha diária registrada, porque essa busca só rodava no onChange do dropdown de WO.
+  useEffect(() => {
+    if (!form.wo) return;
+    // form.wo pode vir como string do SharePoint (coluna WO de fContasReceber é texto) —
+    // Number() garante que bate com o wo numérico da lista Projetos/WO.
+    const woNum = Number(form.wo);
+    const proj = projetos.find(p => Number(p.wo) === woNum);
+    if (proj) setProjData({ vl_diaria: proj.vl_diaria, vl_diaria_locacao: proj.vl_diaria_locacao, vl_outros: proj.vl_outros });
+  }, [form.wo, projetos]);
+
   const calcVlBruto = (f: ContaReceber, pd: typeof projData): number | undefined => {
     if (!f.data_inicio || !f.data_fim) return undefined;
     const di = parseDataInput(f.data_inicio), df = parseDataInput(f.data_fim);
     if (!di || !df) return undefined;
     const dias = Math.round((df.getTime() - di.getTime()) / 86400000) + 1;
     if (dias <= 0) return undefined;
+    if (!f.escopo) return undefined; // sem Escopo definido ainda não dá pra saber qual diária usar
     if (f.escopo === "SERVIÇO") {
       return pd.vl_diaria != null ? pd.vl_diaria * dias : undefined;
     } else {
@@ -637,6 +650,7 @@ function ContaForm({ conta, onSave, onClose, drafts, projetos, impostos, onDraft
     const dias = Math.round((df.getTime() - di.getTime()) / 86400000) + 1;
     if (dias <= 0) return null;
     const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    if (!form.escopo) return `${dias} dias corridos · defina o Escopo para calcular automaticamente`;
     if (form.escopo === "SERVIÇO") {
       if (projData.vl_diaria == null) return `${dias} dias corridos · sem Vl. Diária cadastrado no Projeto WO`;
       return `${dias} dias corridos × ${brl(projData.vl_diaria)}/dia = ${brl(dias * projData.vl_diaria)}`;
