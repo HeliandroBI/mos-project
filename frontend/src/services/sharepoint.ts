@@ -18,10 +18,7 @@ export function initMsal(): Promise<void> {
         // Estado "interaction_in_progress" preso de um redirect anterior
         // que não completou (ex.: reload no meio do login) — limpa e segue.
         if (err?.errorCode === 'interaction_in_progress') {
-          sessionStorage.removeItem('msal.interaction.status');
-          Object.keys(sessionStorage)
-            .filter(k => k.includes('interaction.status'))
-            .forEach(k => sessionStorage.removeItem(k));
+          clearStuckInteractionState();
         } else {
           throw err;
         }
@@ -44,13 +41,33 @@ export function getSpAccount() {
 
 let loginPromise: Promise<void> | null = null;
 
+function clearStuckInteractionState() {
+  Object.keys(sessionStorage)
+    .filter(k => k.includes('interaction.status'))
+    .forEach(k => sessionStorage.removeItem(k));
+}
+
 export async function loginSharePoint() {
   await initMsal();
   if (!loginPromise) {
     // Preserva a aba atual para restaurar após o redirect
     const currentTab = sessionStorage.getItem("mos-active-tab") || "contas";
     sessionStorage.setItem("mos-tab", currentTab);
-    loginPromise = msalInstance.loginRedirect({ scopes: SP_SCOPES });
+    try {
+      loginPromise = msalInstance.loginRedirect({ scopes: SP_SCOPES });
+      await loginPromise;
+    } catch (err: any) {
+      // "interaction_in_progress" preso de uma tentativa de login anterior que não
+      // completou (ex.: fechou a janela/aba no meio do redirect) — sem isso, todo
+      // clique em "Entrar" falhava pra sempre até alguém limpar o sessionStorage na mão.
+      loginPromise = null;
+      if (err?.errorCode === 'interaction_in_progress') {
+        clearStuckInteractionState();
+        loginPromise = msalInstance.loginRedirect({ scopes: SP_SCOPES });
+      } else {
+        throw err;
+      }
+    }
   }
   await loginPromise;
 }
